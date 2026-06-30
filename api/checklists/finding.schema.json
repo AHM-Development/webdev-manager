@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "checkId": { "type": "string" },
+          "severity": { "enum": ["info", "warning", "critical"] },
+          "viewport": { "enum": ["mobile", "tablet", "desktop", "all"] },
+          "title": { "type": "string" },
+          "detail": { "type": "string" },
+          "evidence": { "type": "string" },
+          "recommendation": { "type": "string" },
+          "confidence": { "enum": ["low", "medium", "high"] }
+        },
+        "required": ["checkId", "severity", "viewport", "title", "detail", "evidence", "recommendation", "confidence"]
+      }
+    }
+  },
+  "required": ["findings"]
+}

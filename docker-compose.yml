@@ -1,0 +1,34 @@
+# Local development infrastructure only.
+# Run the frontend and API directly on the host using their own env files:
+#   cd web && npm run dev
+#   cd api && npm run dev
+services:
+  db:
+    image: mysql:8
+    env_file:
+      - ./api/.env.db
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - wp-dev-net
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - wp-dev-net
+
+volumes:
+  mysql-data:
+
+networks:
+  wp-dev-net:
+    driver: bridge

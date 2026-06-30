@@ -1,0 +1,334 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+@import "intl-tel-input/styles";
+
+/* Force light mode app-wide:
+   - Make the `dark:` variant apply only under an explicit `.dark` class
+     (which we never add), so all `dark:` utilities are effectively disabled.
+   - Pin color-scheme to light so native controls/scrollbars stay light. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --background: #e8e8eb;
+  --foreground: #0f172a;
+  --surface: #ffffff;
+  --surface-muted: #f5f6f8;
+  --border: #e3e6eb;
+  --ink-muted: #64748b;
+  --brand: #0b7de3;
+  --brand-strong: #082a78;
+  --brand-cyan: #24c7d5;
+  --brand-soft: #e8f5ff;
+  --danger: #b42318;
+  --accent: var(--brand);
+  --accent-hover: var(--brand-strong);
+  --accent-foreground: #ffffff;
+  --accent-soft: #e8f5ff;
+  --accent-soft-foreground: var(--brand-strong);
+  --focus: var(--brand);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  border-color: var(--border);
+}
+
+::selection {
+  background: #d7f7fb;
+  color: #082a78;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  outline-color: var(--brand);
+}
+
+.app-panel {
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.055);
+}
+
+.app-panel-subtle {
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 16px;
+  background: #f7f8fa;
+}
+
+.metric-card {
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.05);
+}
+
+.app-table-shell {
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 18px;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.045);
+}
+
+.app-table-shell [data-slot="wrapper"] {
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.app-table-shell [data-slot="th"] {
+  background: #ffffff !important;
+  color: #64748b !important;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-table-shell [data-slot="tr"] {
+  border-bottom: 1px solid rgba(226, 232, 240, 0.95);
+}
+
+.app-table-shell .table-root,
+.app-table-shell .table__content,
+.app-table-shell .table__header,
+.app-table-shell .table__body,
+.app-table-shell .table__row,
+.app-table-shell .table__cell,
+.app-table-shell .table__column,
+.app-table-shell table,
+.app-table-shell thead,
+.app-table-shell tbody,
+.app-table-shell tr,
+.app-table-shell th,
+.app-table-shell td {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+}
+
+.app-table-shell .table__column {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-table-shell .table__row {
+  border-color: rgba(226, 232, 240, 0.95);
+}
+
+.app-toolbar {
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.045);
+}
+
+.app-tabbar {
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 4px;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.04);
+}
+
+.app-tab {
+  border-radius: 12px;
+  color: #64748b;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.app-tab-active {
+  background: linear-gradient(135deg, var(--brand-cyan), var(--brand) 48%, var(--brand-strong));
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(11, 125, 227, 0.2);
+}
+
+.kanban-column {
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.045);
+}
+
+.kanban-card {
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+}
+
+.blue-glow {
+  box-shadow: 0 16px 42px rgba(11, 125, 227, 0.14);
+}
+
+.focus-ring {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.focus-ring:focus-visible {
+  box-shadow: 0 0 0 3px rgba(11, 125, 227, 0.22);
+}
+
+.phone-input .iti {
+  width: 100%;
+  display: block;
+}
+
+.phone-input .iti__tel-input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.875rem;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.phone-input .iti__tel-input:focus {
+  border-color: rgba(11, 125, 227, 0.65);
+  box-shadow: 0 0 0 3px rgba(11, 125, 227, 0.14);
+}
+
+.phone-input .iti__selected-country {
+  border-radius: 12px 0 0 12px;
+}
+
+.phone-input .iti__selected-dial-code {
+  color: #0f172a;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.25rem;
+}
+
+.iti__dropdown-content {
+  border-color: rgba(15, 23, 42, 0.12);
+  border-radius: 14px;
+  color: #0f172a;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.25rem;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.14);
+  z-index: 80;
+}
+
+.iti__country-list {
+  font-size: 0.875rem;
+}
+
+.iti__country {
+  color: #0f172a;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.iti__country-name {
+  font-weight: 500;
+}
+
+.iti__dial-code {
+  color: #64748b;
+  font-size: 0.8125rem;
+}
+
+.iti__search-input {
+  border-color: rgba(15, 23, 42, 0.12);
+  border-radius: 10px;
+  color: #0f172a;
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.button {
+  border-radius: 12px !important;
+}
+
+.button--sm,
+.button--icon-only {
+  border-radius: 10px !important;
+}
+
+.button--primary {
+  background: linear-gradient(135deg, var(--brand-cyan), var(--brand) 45%, var(--brand-strong)) !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 24px rgba(11, 125, 227, 0.22) !important;
+}
+
+.button--primary:hover {
+  filter: brightness(0.97);
+}
+
+.button--tertiary,
+.button--ghost {
+  color: var(--brand-strong);
+}
+
+.button--outline {
+  border-color: rgba(11, 125, 227, 0.22);
+  color: var(--brand-strong);
+}
+
+.premium-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #b8c6d6 transparent;
+}
+
+.premium-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.premium-scrollbar::-webkit-scrollbar-thumb {
+  background: #b8c6d6;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+/* Print only the active report export area. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .report-print,
+  .report-print * {
+    visibility: visible;
+  }
+  .report-print {
+    position: absolute;
+    inset: 0;
+    border: 0 !important;
+    padding: 0 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

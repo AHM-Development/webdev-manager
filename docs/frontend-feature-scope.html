@@ -1,0 +1,593 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Frontend Feature Scope</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      color: #111827;
+      line-height: 1.5;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 24px;
+    }
+    h1 {
+      font-size: 30px;
+      margin-bottom: 8px;
+    }
+    h2 {
+      font-size: 22px;
+      margin-top: 32px;
+      margin-bottom: 8px;
+      color: #082a78;
+    }
+    h3 {
+      font-size: 17px;
+      margin-top: 18px;
+      margin-bottom: 6px;
+    }
+    p {
+      margin: 8px 0;
+    }
+    ul {
+      margin-top: 6px;
+      margin-bottom: 12px;
+    }
+    li {
+      margin: 4px 0;
+    }
+    code, pre {
+      background: #f3f4f6;
+      border-radius: 6px;
+      padding: 2px 4px;
+    }
+    pre {
+      padding: 12px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Frontend Feature Scope</h1>
+  <p>This document describes the application features page by page. User authentication and user management are excluded because those already exist in the target application.</p>
+
+  <h2>Dashboard</h2>
+  <p>The dashboard is the main overview page. It should quickly show what needs attention today.</p>
+  <h3>Functions</h3>
+  <ul>
+    <li>Show active tasks.</li>
+    <li>Show overdue tasks.</li>
+    <li>Show tasks waiting for review.</li>
+    <li>Show open issues.</li>
+    <li>Show at-risk projects.</li>
+    <li>Show website health problems.</li>
+    <li>Show recent activity.</li>
+    <li>Show recent notes.</li>
+    <li>Show quick links to important areas.</li>
+  </ul>
+  <p>The goal is to help the team immediately see what is urgent, what is blocked, and what should be handled next.</p>
+
+  <h2>Projects</h2>
+  <p>The Projects page manages clients, projects, and their related websites.</p>
+  <h3>Functions</h3>
+  <ul>
+    <li>View all projects in a table.</li>
+    <li>Search and filter projects.</li>
+    <li>Add a new project.</li>
+    <li>Edit and view project details.</li>
+    <li>Delete a project.</li>
+    <li>Group projects by priority: High, Medium, and Low.</li>
+    <li>Change priority by dragging a project into another priority group.</li>
+    <li>Assign a project to a team member.</li>
+    <li>Store multiple website or domain links per project.</li>
+    <li>Add, edit, and remove website or domain records.</li>
+    <li>Save project changes without closing the edit panel.</li>
+    <li>Import projects in bulk from Google Sheets, CSV, or Excel.</li>
+    <li>Preview imported data before saving.</li>
+    <li>Map imported columns to project fields.</li>
+    <li>Skip columns that should not be imported.</li>
+    <li>Show import success and row-level errors.</li>
+  </ul>
+
+  <h2>Tasks</h2>
+  <p>The Tasks page manages all team tasks.</p>
+  <h3>Functions</h3>
+  <ul>
+    <li>View tasks in a Kanban board.</li>
+    <li>Use columns: Backlog, In Progress, In Review, and Done.</li>
+    <li>Drag tasks between columns.</li>
+    <li>Filter or switch by project.</li>
+    <li>Add a new task.</li>
+    <li>View and edit task details.</li>
+    <li>Update task status.</li>
+    <li>Update task priority.</li>
+    <li>Update checklist progress.</li>
+    <li>Set start date and due date.</li>
+    <li>Attach links or files.</li>
+    <li>Mark checklist items as done.</li>
+  </ul>
+  <h3>Task Card</h3>
+  <ul>
+    <li>Show task title.</li>
+    <li>Show checklist progress.</li>
+    <li>Show due date.</li>
+    <li>Show status.</li>
+    <li>Show priority using a small color-coded icon.</li>
+    <li>Show view action.</li>
+    <li>Show done action.</li>
+  </ul>
+  <h3>Add Task Flow</h3>
+  <ul>
+    <li>First screen: select client or project.</li>
+    <li>First screen: paste raw task details into a large text box.</li>
+    <li>The pasted details can come from chat messages, notes, documents, emails, or links.</li>
+    <li>Links inside the text should be clickable.</li>
+    <li>Click Organize with AI to structure the task.</li>
+    <li>Second screen: show AI-generated title.</li>
+    <li>Second screen: show AI-generated description.</li>
+    <li>Second screen: show AI-generated checklist.</li>
+    <li>Second screen: show priority, status, date range, and attachments or links.</li>
+  </ul>
+  <p>The AI should organize messy pasted instructions into a clean task that is editable before saving.</p>
+
+  <h2>Task Detail</h2>
+  <p>The task detail screen should work as both view and edit.</p>
+  <h3>Fields</h3>
+  <ul>
+    <li>Client or project.</li>
+    <li>Title.</li>
+    <li>Description.</li>
+    <li>Checklist.</li>
+    <li>Progress.</li>
+    <li>Priority.</li>
+    <li>Status.</li>
+    <li>Start date.</li>
+    <li>Due date.</li>
+    <li>Attachments or links.</li>
+  </ul>
+  <h3>Functions</h3>
+  <ul>
+    <li>Edit the title.</li>
+    <li>Edit the description.</li>
+    <li>Check and uncheck checklist items.</li>
+    <li>Add and remove checklist items.</li>
+    <li>Update priority.</li>
+    <li>Update status.</li>
+    <li>Update date range.</li>
+    <li>Remove attachments or links.</li>
+    <li>Save changes.</li>
+  </ul>
+
+  <h2>Task Summary</h2>
+  <p>The Task Summary page gives a structured overview of work by assignee and project.</p>
+  <h3>Functions</h3>
+  <ul>
+    <li>Filter tasks by status.</li>
+    <li>Group tasks by assignee.</li>
+    <li>Show each assignee as a simple heading.</li>
+    <li>Under each assignee, show a table of projects.</li>
+    <li>Clicking a project expands it.</li>
+    <li>Expanded project shows tasks under that project matching the selected status.</li>
+  </ul>
+  <h3>Task Item</h3>
+  <ul>
+    <li>Show title.</li>
+    <li>Show status.</li>
+    <li>Show priority.</li>
+    <li>Show checklist progress.</li>
+    <li>Show view and edit action.</li>
+  </ul>
+
+  <h2>My Tasks</h2>
+  <p>The My Tasks page shows only the current user's assigned tasks.</p>
+  <h3>Functions</h3>
+  <ul>
+    <li>View personal tasks in a Kanban board.</li>
+    <li>Use columns: Backlog, In Progress, In Review, and Done.</li>
+    <li>Filter by project.</li>
+    <li>Add a new task.</li>
+    <li>Drag tasks between columns.</li>
+    <li>View and edit task details.</li>
+    <li>Update task progress.</li>
+    <li>Use the same task card design as the main Tasks page.</li>
+  </ul>
+
+  <h2>Website Health</h2>
+  <p>The Website Health page monitors all websites. Each row represents one website or domain.</p>
+  <h3>Functions</h3>
+  <ul>
+    <li>Show all websites in a quick overview table.</li>
+    <li>Keep websites from the same project or client grouped together.</li>
+    <li>Scan a website.</li>
+    <li>View detailed scan results.</li>
+    <li>Export health reports.</li>
+    <li>Show last scan or update date.</li>
+    <li>Show connector status.</li>
+  </ul>
+  <h3>Main Table Columns</h3>
+  <ul>
+    <li>Website and project.</li>
+    <li>Overall score.</li>
+    <li>Number of pages.</li>
+    <li>Lighthouse average.</li>
+    <li>Technical SEO issue count.</li>
+    <li>Design QA issue count.</li>
+    <li>Website checklist unresolved count.</li>
+    <li>Last scan or update.</li>
+    <li>Connector status.</li>
+    <li>Actions.</li>
+  </ul>
+  <h3>Actions</h3>
+  <ul>
+    <li>View details.</li>
+    <li>Start scan.</li>
+    <li>Export report.</li>
+  </ul>
+  <h3>Details Drawer</h3>
+  <ul>
+    <li>Show overview cards for Pages, Lighthouse, Technical SEO, Design QA, Forms, and Website Checklists.</li>
+    <li>Show priority issues clearly.</li>
+    <li>Show per-page details for Lighthouse, Technical SEO, Design QA, and Forms.</li>
+  </ul>
+  <h3>Website Health Checks</h3>
+  <ul>
+    <li>Page speed and performance.</li>
+    <li>Accessibility.</li>
+    <li>Best practices.</li>
+    <li>SEO score.</li>
+    <li>Technical SEO issues.</li>
+    <li>Layout and design issues.</li>
+    <li>Mobile, tablet, and desktop responsiveness.</li>
+    <li>Broken layouts.</li>
+    <li>Font inconsistencies.</li>
+    <li>Dummy or incorrect content.</li>
+    <li>Wrong names or unrelated content.</li>
+    <li>Forms found on each page.</li>
+    <li>Whether forms appear functional.</li>
+    <li>Whether forms have reCAPTCHA.</li>
+    <li>WordPress version.</li>
+    <li>Plugin list.</li>
+    <li>Plugin update status.</li>
+    <li>Required plugins present or missing.</li>
+    <li>Website users.</li>
+    <li>Password age.</li>
+    <li>Security checklist.</li>
+  </ul>
+
+  <h2>Technical SEO</h2>
+  <p>Technical SEO should work like a checklist. The table should show total SEO issues across all pages.</p>
+  <h3>Checks</h3>
+  <ul>
+    <li>Missing page title.</li>
+    <li>Duplicate page title.</li>
+    <li>Missing meta description.</li>
+    <li>Duplicate meta description.</li>
+    <li>Missing H1.</li>
+    <li>Multiple H1 tags.</li>
+    <li>Bad heading structure.</li>
+    <li>Missing image alt text.</li>
+    <li>Broken links.</li>
+    <li>Missing canonical URL.</li>
+    <li>Bad indexability settings.</li>
+    <li>Missing sitemap.</li>
+    <li>Missing robots file.</li>
+    <li>Missing schema markup.</li>
+    <li>Poor URL structure.</li>
+    <li>Thin content.</li>
+    <li>Missing social sharing metadata.</li>
+  </ul>
+
+  <h2>Design QA</h2>
+  <p>Design QA checks the visual quality of each page.</p>
+  <h3>Checks</h3>
+  <ul>
+    <li>Broken layout.</li>
+    <li>Overlapping elements.</li>
+    <li>Bad spacing.</li>
+    <li>Incorrect font size.</li>
+    <li>Inconsistent typography.</li>
+    <li>Elements not aligned.</li>
+    <li>Broken responsive layout.</li>
+    <li>Content cut off.</li>
+    <li>Buttons or sections displaying incorrectly.</li>
+    <li>Dummy content.</li>
+    <li>Incorrect names.</li>
+    <li>Unrelated content.</li>
+    <li>Wrong doctor, team, or business names.</li>
+    <li>Missing sections.</li>
+    <li>Page does not match expected design quality.</li>
+  </ul>
+  <p>A future feature can compare a webpage against a design file.</p>
+
+  <h2>Forms Check</h2>
+  <p>The forms check should detect forms on the website.</p>
+  <h3>For each form, show</h3>
+  <ul>
+    <li>Page where the form appears.</li>
+    <li>Form name or detected purpose.</li>
+    <li>Number of fields.</li>
+    <li>Required fields.</li>
+    <li>Whether it appears functional.</li>
+    <li>Whether reCAPTCHA is present.</li>
+    <li>Any visible issues.</li>
+  </ul>
+
+  <h2>Website Checklist</h2>
+  <p>The website checklist should cover WordPress and operational health.</p>
+  <h3>Checks</h3>
+  <ul>
+    <li>WordPress version.</li>
+    <li>Whether WordPress is updated.</li>
+    <li>Plugin list.</li>
+    <li>Plugin update status.</li>
+    <li>Required plugins present.</li>
+    <li>Required plugins missing.</li>
+    <li>Website users.</li>
+    <li>Password last updated date.</li>
+    <li>Old or stale passwords.</li>
+    <li>Security headers.</li>
+    <li>HTTPS.</li>
+    <li>Mixed content.</li>
+    <li>Exposed sensitive files.</li>
+    <li>Basic hardening checks.</li>
+  </ul>
+
+  <h2>Website Users and Credentials</h2>
+  <p>This page manages login credentials for client websites.</p>
+  <h3>Functions</h3>
+  <ul>
+    <li>View stored credentials in a table.</li>
+    <li>Search credentials.</li>
+    <li>Add credentials.</li>
+    <li>Edit and view credentials.</li>
+    <li>Delete credentials.</li>
+    <li>Bulk import credentials.</li>
+    <li>Copy credentials.</li>
+  </ul>
+  <h3>Credential Table</h3>
+  <ul>
+    <li>Name.</li>
+    <li>Project or site.</li>
+    <li>Username.</li>
+    <li>Created date.</li>
+    <li>Password last updated date.</li>
+    <li>Password health.</li>
+    <li>Actions.</li>
+  </ul>
+  <p>The password itself should not be shown as a table column.</p>
+  <h3>Copy Action Output</h3>
+  <pre>Site URL
+Username
+Password</pre>
+  <h3>Password Health</h3>
+  <ul>
+    <li>Healthy.</li>
+    <li>Warning.</li>
+    <li>Needs update.</li>
+  </ul>
+  <h3>Bulk Import</h3>
+  <ul>
+    <li>File or sheet upload.</li>
+    <li>Preview.</li>
+    <li>Column mapping.</li>
+    <li>Skip unused columns.</li>
+    <li>Validation.</li>
+    <li>Error summary.</li>
+  </ul>
+
+  <h2>Issue Boards</h2>
+  <p>The Issue Boards page tracks website or project issues.</p>
+  <h3>Functions</h3>
+  <ul>
+    <li>View issues.</li>
+    <li>Add issue.</li>
+    <li>Edit issue.</li>
+    <li>Delete issue.</li>
+    <li>Change issue status.</li>
+    <li>Assign issue to project or website.</li>
+    <li>Track issue checklist and fixes.</li>
+  </ul>
+  <h3>Issue Fields</h3>
+  <ul>
+    <li>Title.</li>
+    <li>Description.</li>
+    <li>Project.</li>
+    <li>Website.</li>
+    <li>Priority or severity.</li>
+    <li>Status.</li>
+    <li>Checklist of fixes.</li>
+    <li>Notes.</li>
+  </ul>
+  <h3>Statuses</h3>
+  <ul>
+    <li>Open.</li>
+    <li>In Progress.</li>
+    <li>Fixed.</li>
+    <li>Done.</li>
+  </ul>
+  <p>Issues can later be created from website health scan findings.</p>
+
+  <h2>Activity Logs</h2>
+  <p>Activity logs help debug and audit what happened.</p>
+  <h3>Groups</h3>
+  <ul>
+    <li>Website activity.</li>
+    <li>System or team activity.</li>
+  </ul>
+  <h3>Columns</h3>
+  <ul>
+    <li>Name.</li>
+    <li>IP address.</li>
+    <li>Action.</li>
+    <li>Date and time.</li>
+  </ul>
+  <h3>Functions</h3>
+  <ul>
+    <li>View activity logs.</li>
+    <li>Filter by project.</li>
+    <li>Filter by website.</li>
+    <li>Filter by action.</li>
+    <li>Filter by date range.</li>
+    <li>Paginate results.</li>
+    <li>Show severity or status color.</li>
+  </ul>
+  <h3>Logged Actions</h3>
+  <ul>
+    <li>Project created, updated, or deleted.</li>
+    <li>Website or domain added, updated, or deleted.</li>
+    <li>Task created, updated, moved, or deleted.</li>
+    <li>Credential created, updated, copied, or deleted.</li>
+    <li>Website scan started, completed, or failed.</li>
+    <li>Connector paired or disconnected.</li>
+    <li>Settings changed.</li>
+    <li>Notification settings changed.</li>
+    <li>AI prompt changed.</li>
+  </ul>
+
+  <h2>My Notes</h2>
+  <p>My Notes is a personal notes page similar to Google Keep.</p>
+  <h3>Functions</h3>
+  <ul>
+    <li>Create note.</li>
+    <li>Edit note.</li>
+    <li>Delete note.</li>
+    <li>Search notes.</li>
+    <li>Show notes as cards.</li>
+    <li>Show created or updated date under each card.</li>
+    <li>Show empty state when there are no notes.</li>
+  </ul>
+  <p>Future feature: add reminder date and time, then send a reminder notification.</p>
+
+  <h2>Settings</h2>
+  <p>The Settings page controls application behavior.</p>
+  <h3>Sections</h3>
+  <ul>
+    <li>General settings.</li>
+    <li>Notification settings.</li>
+    <li>Email connector.</li>
+    <li>AI settings.</li>
+  </ul>
+  <h3>General Settings</h3>
+  <ul>
+    <li>Workspace or app name.</li>
+    <li>Time zone.</li>
+    <li>Time zone options: Dubai, London, and Manila.</li>
+  </ul>
+  <h3>Notification Settings</h3>
+  <ul>
+    <li>Turn notifications off.</li>
+    <li>Send by email.</li>
+    <li>Send by Discord.</li>
+    <li>Send by both email and Discord.</li>
+  </ul>
+  <h3>Daily User Summary</h3>
+  <ul>
+    <li>Sends summary of what was completed.</li>
+    <li>Has a time field.</li>
+  </ul>
+  <h3>Pre-Shift Briefing</h3>
+  <ul>
+    <li>Sends todos, priorities, and manager notes before shift starts.</li>
+    <li>Has a time field.</li>
+  </ul>
+  <h3>Email Connector</h3>
+  <ul>
+    <li>Connect email provider.</li>
+    <li>Disconnect email provider.</li>
+    <li>Test email sending.</li>
+    <li>Keep setup simple.</li>
+    <li>Do not show advanced settings if not needed.</li>
+  </ul>
+  <h3>AI Settings</h3>
+  <ul>
+    <li>AI model.</li>
+    <li>Task organizer system prompt.</li>
+    <li>Task organizer user prompt template.</li>
+    <li>Prompt must be required.</li>
+    <li>If no prompt exists, task organization should not run.</li>
+  </ul>
+
+  <h2>Tools</h2>
+  <p>The Tools page contains utility tools.</p>
+  <h3>Current Tools</h3>
+  <ul>
+    <li>Images to WebP.</li>
+    <li>Website connector plugin.</li>
+    <li>Content uploader.</li>
+    <li>Design-to-page converter.</li>
+  </ul>
+  <h3>Website Connector Plugin</h3>
+  <ul>
+    <li>Show a Download button.</li>
+    <li>Used to connect client websites to the app.</li>
+    <li>Can later be extended with more website management features.</li>
+  </ul>
+
+  <h2>Website Connector Plugin</h2>
+  <p>The connector plugin is used to connect a website to the management app.</p>
+  <h3>Functions</h3>
+  <ul>
+    <li>Pair website with the app using a token.</li>
+    <li>Validate connection.</li>
+    <li>Send website status.</li>
+    <li>Send WordPress version.</li>
+    <li>Send plugin list.</li>
+    <li>Send plugin update status.</li>
+    <li>Send user list.</li>
+    <li>Send last activity or update information.</li>
+    <li>Support future website management features.</li>
+  </ul>
+
+  <h2>Reports and Exporting</h2>
+  <p>Reports should not be a standalone main page. Reports belong inside Website Health.</p>
+  <h3>Export Function</h3>
+  <ul>
+    <li>Let the user choose website.</li>
+    <li>Let the user choose which reports to include.</li>
+    <li>Combine selected reports into one file.</li>
+    <li>Export without showing scan result previews inside the modal.</li>
+  </ul>
+  <h3>Report Types</h3>
+  <ul>
+    <li>Lighthouse.</li>
+    <li>Technical SEO.</li>
+    <li>Design QA.</li>
+    <li>Forms.</li>
+    <li>Website checklist.</li>
+    <li>Security checklist.</li>
+  </ul>
+
+  <h2>Global UI Behavior</h2>
+  <ul>
+    <li>Use a clean, professional, light-theme interface.</li>
+    <li>Use compact tables.</li>
+    <li>Use white table containers.</li>
+    <li>Keep filters in one row when possible.</li>
+    <li>Filters should be searchable.</li>
+    <li>Search field should focus automatically when filter dropdown opens.</li>
+    <li>Use toast notifications instead of inline alerts.</li>
+    <li>Toasts should appear at the top center.</li>
+    <li>Toasts should be color-coded: success, warning, error, and info.</li>
+    <li>Buttons should have consistent border radius.</li>
+    <li>Avoid overly rounded pill buttons unless needed.</li>
+    <li>Avoid nested cards.</li>
+    <li>Avoid cluttered layouts.</li>
+    <li>Use reusable components for repeated patterns.</li>
+    <li>Keep table actions clean, preferably dropdown actions where there are multiple choices.</li>
+  </ul>
+
+  <h2>Important Product Rules</h2>
+  <ul>
+    <li>Avoid dummy data once real data exists.</li>
+    <li>Keep credentials hidden unless explicitly copied or viewed.</li>
+    <li>Track sensitive actions in activity logs.</li>
+    <li>Every form should validate inputs.</li>
+    <li>Bulk imports should always preview before saving.</li>
+    <li>AI-generated content should be editable before saving.</li>
+    <li>Website health should show quick summary first, then detailed breakdown.</li>
+    <li>Task details and Add Task should use the same structure.</li>
+    <li>My Tasks and Tasks should use the same task card design.</li>
+  </ul>
+</body>
+</html>

@@ -1,0 +1,14 @@
+# Secrets — never commit real env files; keep only *.example templates
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# OS / editor
+.DS_Store
+
+# Dependencies / build output (in case web/ and api/ aren't separately ignored)
+node_modules/
+.next/
+dist/
+build/

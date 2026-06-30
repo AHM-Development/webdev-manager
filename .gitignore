@@ -12,3 +12,7 @@ node_modules/
 .next/
 dist/
 build/
+
+# Local conversation / chat exports — not part of the project
+docs/conversation-export/
+docs/conversation-export.zip

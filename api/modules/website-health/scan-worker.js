@@ -8,6 +8,7 @@ var browserScanner = require('./browser-scanner.service');
 var lighthouse = require('./lighthouse.service');
 var review = require('./review.service');
 var connector = require('../connectors/wordpress.service');
+var siteChecks = require('./site-checks.service');
 var health = require('./website-health.service');
 
 var QUEUE = 'website-health:scan-queue';
@@ -64,6 +65,7 @@ function pageLegacy(pageId, evidence, lighthouseResult, reviewed) {
   });
   return {
     id: pageId, name: evidence.name, path: evidence.path,
+    lighthouse: lighthouseResult,
     speedMobile: {
       performance: mobileScores.performance || 0, accessibility: mobileScores.accessibility || 0,
       bestPractices: mobileScores.bestPractices || 0, seo: mobileScores.seo || 0,
@@ -107,10 +109,59 @@ function summary(pages, findings, wp) {
   return { overall: overall, performance: performance, pages: pages.length, forms: pages.reduce(function(sum, page) { return sum + page.forms.length; }, 0), criticalIssues: critical, warningIssues: warnings, technicalSeoIssues: categories.technical_seo || 0, designIssues: (categories.design || 0) + (categories.content || 0), checklistIssues: (categories.wordpress || 0) + (categories.security || 0), security: categories.security ? (findings.some(function(item) { return item.category === 'security' && item.severity === 'critical'; }) ? 'fail' : 'warn') : 'pass', connectorStatus: wp ? 'connected' : 'disconnected' };
 }
 
-function wordpressFindings(snapshot, essentialPlugins) {
+function daysSince(iso) {
+  if (!iso) return null;
+  var then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return null;
+  return Math.floor((Date.now() - then) / 86400000);
+}
+
+// Recommended max administrator accounts before least-privilege review is advised.
+var ADMIN_LIMIT = 3;
+// Plugin groups where running more than one active plugin (by brand) conflicts.
+var CONFLICT_GROUPS = {
+  caching: ['WP Rocket', 'W3 Total Cache', 'WP Super Cache', 'LiteSpeed Cache', 'WP Fastest Cache', 'Autoptimize'],
+  SEO: ['Rank Math', 'Yoast SEO', 'All in One SEO', 'SEOPress', 'The SEO Framework'],
+  security: ['Wordfence', 'Kadence Security', 'Sucuri', 'iThemes Security', 'Solid Security', 'All In One WP Security'],
+  backup: ['UpdraftPlus', 'BackWPup', 'Duplicator', 'BackupBuddy', 'Jetpack VaultPress'],
+};
+// Any active member means image optimization is in place.
+var IMAGE_OPTIMIZERS = ['Imagify', 'ShortPixel', 'Smush', 'EWWW', 'Optimole', 'reSmush', 'TinyPNG', 'Converter for Media'];
+
+function pluginActive(plugins, needle) {
+  var n = String(needle).toLowerCase();
+  return plugins.some(function(plugin) { return plugin.name.toLowerCase().indexOf(n) !== -1 && plugin.active; });
+}
+
+var PLACEHOLDER_EMAIL = /(example\.(?:com|org|net)|@example|admin@|test@|your-?email|change-?me|wordpress@|no-?reply@)/i;
+
+// Deterministic config audit over the connector's form inventory (no email sent).
+function formsFindings(inventory, detectedOnPages) {
+  var out = [];
+  (inventory || []).forEach(function(form) {
+    var label = (form.title || 'Untitled form') + ' (' + form.plugin + ')';
+    var where = form.locator || form.pageUrl || form.id;
+    if (!form.recipients || !form.recipients.length) {
+      out.push({ category: 'forms', checkId: 'forms.no-recipient', severity: 'critical', viewport: 'all', title: 'Form has no recipient', detail: label + ' has no recipient (To) address, so submissions may be lost.', evidence: where, recommendation: 'Set a valid recipient address for this form.', confidence: 'high' });
+    } else {
+      var placeholders = form.recipients.filter(function(email) { return PLACEHOLDER_EMAIL.test(email); });
+      if (placeholders.length) out.push({ category: 'forms', checkId: 'forms.placeholder-recipient', severity: 'warning', viewport: 'all', title: 'Form recipient looks like a placeholder', detail: label + ' sends to ' + placeholders.join(', ') + '.', evidence: placeholders.join(', '), recommendation: 'Replace placeholder/default recipients with the real destination inbox.', confidence: 'high' });
+    }
+    if (!form.fields || !form.fields.length) {
+      out.push({ category: 'forms', checkId: 'forms.no-fields', severity: 'warning', viewport: 'all', title: 'Form has no fields', detail: label + ' has no fields configured.', evidence: form.id, recommendation: 'Add the expected fields or remove the empty form.', confidence: 'medium' });
+    }
+  });
+  if ((inventory || []).length && !detectedOnPages) {
+    out.push({ category: 'forms', checkId: 'forms.none-rendered', severity: 'info', viewport: 'all', title: 'Configured forms were not detected on scanned pages', detail: inventory.length + ' form(s) are configured but none were found rendering on the crawled pages.', evidence: '', recommendation: 'Confirm the forms are placed on published pages included in the sitemap.', confidence: 'medium' });
+  }
+  return out;
+}
+
+function wordpressFindings(snapshot, essentialPlugins, stalenessDays) {
   if (!snapshot) return [];
   var output = [];
   var plugins = snapshot.plugins || [];
+  var threshold = Number(stalenessDays) > 0 ? Number(stalenessDays) : 90;
   if (snapshot.wordpress && snapshot.wordpress.latestVersion && snapshot.wordpress.version !== snapshot.wordpress.latestVersion) {
     output.push({ category: 'wordpress', checkId: 'wordpress.core-update', severity: 'critical', viewport: 'all', title: 'WordPress core needs an update', detail: 'Installed ' + snapshot.wordpress.version + '; latest ' + snapshot.wordpress.latestVersion + '.', evidence: snapshot.wordpress.version, recommendation: 'Back up, verify compatibility, and update WordPress core.', confidence: 'high' });
   }
@@ -118,8 +169,37 @@ function wordpressFindings(snapshot, essentialPlugins) {
     output.push({ category: 'wordpress', checkId: 'wordpress.plugin-update', severity: 'warning', viewport: 'all', title: plugin.name + ' needs an update', detail: 'Installed ' + plugin.version + '; latest ' + plugin.latestVersion + '.', evidence: plugin.file || plugin.name, recommendation: 'Review compatibility, back up, and update the plugin.', confidence: 'high' });
   });
   (essentialPlugins || []).forEach(function(name) {
-    if (!plugins.some(function(plugin) { return plugin.name.toLowerCase() === String(name).toLowerCase() && plugin.active; })) output.push({ category: 'wordpress', checkId: 'wordpress.essential-plugin', severity: 'critical', viewport: 'all', title: 'Essential plugin missing or inactive', detail: name + ' is required by the website profile.', evidence: name, recommendation: 'Install or activate the approved plugin, or update the website profile.', confidence: 'high' });
+    var needle = String(name).toLowerCase();
+    if (!plugins.some(function(plugin) { return plugin.name.toLowerCase().indexOf(needle) !== -1 && plugin.active; })) output.push({ category: 'wordpress', checkId: 'wordpress.essential-plugin', severity: 'critical', viewport: 'all', title: 'Essential plugin missing or inactive', detail: name + ' is required by the website profile.', evidence: name, recommendation: 'Install or activate the approved plugin, or update the website profile.', confidence: 'high' });
   });
+
+  // Inactive plugins are dead weight and still carry vulnerabilities.
+  var inactivePlugins = plugins.filter(function(plugin) { return !plugin.active; });
+  if (inactivePlugins.length) {
+    output.push({ category: 'wordpress', checkId: 'wordpress.inactive-plugin', severity: 'warning', viewport: 'all', title: inactivePlugins.length + ' inactive plugin' + (inactivePlugins.length === 1 ? '' : 's') + ' installed', detail: 'Inactive plugins still receive vulnerabilities and add maintenance overhead.', evidence: inactivePlugins.map(function(plugin) { return plugin.name; }).slice(0, 20).join('\n'), recommendation: 'Remove plugins that are not in use.', confidence: 'high' });
+  }
+
+  // Conflicting plugins in the same category (counted by distinct brand).
+  Object.keys(CONFLICT_GROUPS).forEach(function(category) {
+    var matched = CONFLICT_GROUPS[category].filter(function(brand) { return pluginActive(plugins, brand); });
+    if (matched.length > 1) {
+      output.push({ category: 'wordpress', checkId: 'wordpress.plugin-conflict', severity: 'warning', viewport: 'all', title: 'Multiple ' + category + ' plugins are active', detail: matched.length + ' ' + category + ' plugins are active at once, which can conflict and hurt performance.', evidence: matched.join(', '), recommendation: 'Run a single ' + category + ' plugin and remove the rest.', confidence: 'high' });
+    }
+  });
+
+  // Backups (UpdraftPlus schedule) and email deliverability (WP Mail SMTP mailer).
+  var services = snapshot.services || {};
+  if (pluginActive(plugins, 'UpdraftPlus') && !services.backupScheduled) {
+    output.push({ category: 'wordpress', checkId: 'services.backups', severity: 'warning', viewport: 'all', title: 'No automatic backup schedule configured', detail: 'UpdraftPlus is active but backups are not scheduled' + (services.backupInterval ? ' (interval: ' + services.backupInterval + ')' : '') + '.', evidence: 'updraft_interval=' + (services.backupInterval || 'manual'), recommendation: 'Configure a scheduled backup (daily/weekly) with offsite storage.', confidence: 'high' });
+  }
+  if (pluginActive(plugins, 'WP Mail SMTP') && !services.smtpConfigured) {
+    output.push({ category: 'wordpress', checkId: 'services.smtp', severity: 'warning', viewport: 'all', title: 'SMTP is not configured', detail: 'WP Mail SMTP is active but still using the default PHP mailer' + (services.smtpMailer ? ' (' + services.smtpMailer + ')' : '') + ', so transactional email may not deliver reliably.', evidence: 'mailer=' + (services.smtpMailer || 'mail'), recommendation: 'Configure an authenticated SMTP mailer and send a test email.', confidence: 'high' });
+  }
+
+  // Image optimization: warn when no known optimizer plugin is active.
+  if (!IMAGE_OPTIMIZERS.some(function(brand) { return pluginActive(plugins, brand); })) {
+    output.push({ category: 'wordpress', checkId: 'wordpress.image-optimization', severity: 'info', viewport: 'all', title: 'No image-optimization plugin detected', detail: 'No recognised image optimizer is active, so images may not be compressed or served in next-gen formats.', evidence: '', recommendation: 'Consider an image optimizer (e.g. Imagify, ShortPixel) to compress and serve WebP/AVIF.', confidence: 'medium' });
+  }
   (snapshot.users || []).forEach(function(user) {
     if (!user.passwordUpdatedAt) {
       output.push({ category: 'wordpress', checkId: 'wordpress.password-age-unknown', severity: 'warning', viewport: 'all', title: 'Password age is not yet known', detail: 'AHM Core has not observed a password update for ' + user.name + '.', evidence: user.email, recommendation: 'Ask the user to rotate their password so AHM Core can begin tracking its age.', confidence: 'high' });
@@ -128,11 +208,33 @@ function wordpressFindings(snapshot, essentialPlugins) {
     var ageDays = (Date.now() - new Date(user.passwordUpdatedAt).getTime()) / 86400000;
     if (Number.isFinite(ageDays) && ageDays > 90) output.push({ category: 'wordpress', checkId: 'wordpress.password-age', severity: 'warning', viewport: 'all', title: 'WordPress password is older than 90 days', detail: user.name + "'s password was last updated " + Math.floor(ageDays) + ' days ago.', evidence: user.email, recommendation: 'Require a password rotation and review whether this account still needs access.', confidence: 'high' });
   });
+  // Least privilege: too many administrator accounts widens the attack surface.
+  var admins = (snapshot.users || []).filter(function(user) { return String(user.role).toLowerCase() === 'administrator'; });
+  if (admins.length > ADMIN_LIMIT) {
+    output.push({ category: 'wordpress', checkId: 'wordpress.admin-count', severity: 'warning', viewport: 'all', title: admins.length + ' administrator accounts', detail: admins.length + ' users have the administrator role (recommended maximum is ' + ADMIN_LIMIT + ').', evidence: admins.map(function(user) { return user.email || user.name; }).join('\n'), recommendation: 'Review administrator accounts and downgrade or remove those that do not need full access.', confidence: 'high' });
+  }
+
+  // Content freshness (blog activity + last content update). Threshold is per-site.
+  var content = snapshot.content || {};
+  if (content.publishedPosts === 0) {
+    output.push({ category: 'wordpress', checkId: 'content.no-posts', severity: 'info', viewport: 'all', title: 'No published blog posts', detail: 'The site has no published posts, so blog activity cannot be assessed.', evidence: 'publishedPosts=0', recommendation: 'Publish blog content if an active blog is expected for this site.', confidence: 'high' });
+  } else {
+    var blogAge = daysSince(content.lastPostPublishedAt);
+    if (blogAge != null && blogAge > threshold) {
+      output.push({ category: 'wordpress', checkId: 'content.blog-stale', severity: 'warning', viewport: 'all', title: 'No new blog post in over ' + threshold + ' days', detail: 'The most recent blog post was published ' + blogAge + ' days ago (' + content.lastPostPublishedAt + ').', evidence: content.lastPostPublishedAt, recommendation: 'Publish fresh blog content to keep the site active for visitors and search engines.', confidence: 'high' });
+    }
+  }
+  var modifiedAge = daysSince(content.lastModifiedAt);
+  if (modifiedAge != null && modifiedAge > threshold) {
+    output.push({ category: 'wordpress', checkId: 'content.stale', severity: 'warning', viewport: 'all', title: 'No content updated in over ' + threshold + ' days', detail: 'The most recently modified content was updated ' + modifiedAge + ' days ago (' + content.lastModifiedAt + ').', evidence: content.lastModifiedAt, recommendation: 'Review and refresh key pages/posts so information stays current.', confidence: 'high' });
+  }
+
   var wpSecurity = snapshot.security || {};
   if (!wpSecurity.ssl) output.push({ category: 'security', checkId: 'wordpress.ssl', severity: 'critical', viewport: 'all', title: 'WordPress does not report HTTPS', detail: 'AHM Core reports that is_ssl() is false.', evidence: snapshot.siteUrl, recommendation: 'Correct proxy HTTPS detection and enforce HTTPS.', confidence: 'high' });
   if (wpSecurity.debug || wpSecurity.debugDisplay) output.push({ category: 'security', checkId: 'wordpress.debug', severity: 'critical', viewport: 'all', title: 'WordPress debugging is exposed', detail: 'WP_DEBUG or WP_DEBUG_DISPLAY is enabled.', evidence: JSON.stringify({ debug: wpSecurity.debug, debugDisplay: wpSecurity.debugDisplay }), recommendation: 'Disable debug display in production and route errors to protected logs.', confidence: 'high' });
   if (!wpSecurity.fileEditDisabled) output.push({ category: 'security', checkId: 'wordpress.file-editor', severity: 'warning', viewport: 'all', title: 'WordPress file editor is enabled', detail: 'DISALLOW_FILE_EDIT is not enabled.', evidence: 'DISALLOW_FILE_EDIT', recommendation: 'Disable dashboard theme and plugin file editing in production.', confidence: 'high' });
   if (wpSecurity.xmlrpcEnabled) output.push({ category: 'security', checkId: 'wordpress.xmlrpc', severity: 'warning', viewport: 'all', title: 'XML-RPC is enabled', detail: 'WordPress reports XML-RPC access is enabled.', evidence: snapshot.siteUrl + 'xmlrpc.php', recommendation: 'Disable XML-RPC unless a confirmed integration requires it.', confidence: 'high' });
+  if (wpSecurity.wpCronDisabled) output.push({ category: 'wordpress', checkId: 'wordpress.wp-cron', severity: 'info', viewport: 'all', title: 'WP-Cron is disabled', detail: 'DISABLE_WP_CRON is enabled, so WordPress will not run scheduled tasks on page loads.', evidence: 'DISABLE_WP_CRON', recommendation: 'Confirm a real server cron is calling wp-cron.php so backups, updates, and the AHM heartbeat still run on schedule.', confidence: 'high' });
   return output;
 }
 
@@ -146,8 +248,10 @@ async function processScan(scanId) {
   try {
     var identity = health.parseJson(website.approved_identity, {});
     var essentialPlugins = health.parseJson(website.essential_plugins, []);
+    if (!Array.isArray(essentialPlugins) || !essentialPlugins.length) essentialPlugins = health.DEFAULT_ESSENTIAL_PLUGINS;
+    var stalenessDays = website.content_staleness_days != null ? Number(website.content_staleness_days) : health.DEFAULT_CONTENT_STALENESS_DAYS;
     var maxPages = Math.min(env.websiteHealth.maxPages, Number(website.max_pages || env.websiteHealth.maxPages));
-    var checks = health.parseJson(scan.selected_checks, null) || ['lighthouse', 'technical_seo', 'design_qa', 'website_checklists', 'security'];
+    var checks = health.parseJson(scan.selected_checks, null) || ['lighthouse', 'technical_seo', 'design_qa', 'website_checklists'];
     var runLighthouse = checks.indexOf('lighthouse') !== -1;
     await update(scanId, 'crawling', 5);
     var browserPages = await browserScanner.scanWebsite(scanId, website.url, maxPages, async function(page, count) {
@@ -163,13 +267,9 @@ async function processScan(scanId) {
         ? await lighthouse.run(evidence.url)
         : { status: 'not_run', reason: evidence.error || 'Lighthouse was not selected.', mobile: null, desktop: null };
       var reviewed = await review.review(evidence, identity, checks);
-      // Claude interprets the real Lighthouse metrics into prioritised findings.
-      var lighthouseFindings = [];
-      if (runLighthouse && pageSpeed.status !== 'not_run') {
-        var lhReview = await review.reviewLighthouse(evidence, pageSpeed);
-        lighthouseFindings = lhReview.findings;
-      }
-      var pageFindings = reviewed.findings.concat(lighthouseFindings);
+      // Lighthouse is display-only (PageSpeed scores/metrics/field data/diagnostics
+      // are stored on the page row); it produces no findings.
+      var pageFindings = reviewed.findings;
       var pageId = security.uuid();
       var seo = { status: reviewed.technicalSeo.status, findings: reviewed.findings.filter(function(item) { return item.category === 'technical_seo'; }) };
       var design = { status: reviewed.designContent.status, figmaComparison: 'deferred', findings: reviewed.findings.filter(function(item) { return item.category === 'design' || item.category === 'content'; }), layouts: evidence.layouts };
@@ -184,20 +284,37 @@ async function processScan(scanId) {
       legacyPages.push(pageLegacy(pageId, evidence, pageSpeed, reviewed));
       await emit(events.HEALTH_SCAN_PAGE_COMPLETED, scanId, { websiteId: String(website.id), pageId: pageId, page: evidence.url, completedPages: index + 1, totalPages: browserPages.length });
     }
-    // WordPress + security checks only run when selected and the connector is paired.
-    var wantWordpress = checks.indexOf('website_checklists') !== -1;
-    var wantSecurity = checks.indexOf('security') !== -1;
+    // Site-level Technical SEO checks (homepage, robots.txt, sitemap, broken
+    // links, duplicate meta) run once per scan, independent of Lighthouse.
+    if (checks.indexOf('technical_seo') !== -1 && browserPages.length && !(await cancelled(scanId))) {
+      await update(scanId, 'site_checks', 88);
+      var siteFindings = await siteChecks.siteChecks({ websiteUrl: website.url, sitemapUrl: scan.sitemap_url, pages: browserPages });
+      await insertFindings(scanId, null, siteFindings);
+      allFindings.push.apply(allFindings, siteFindings);
+    }
+    // Website checklists (WordPress maintenance + security) only run when
+    // selected and the connector is paired. 'security' is accepted for
+    // backward compatibility with scans queued before the merge.
+    var wantChecklists = checks.indexOf('website_checklists') !== -1 || checks.indexOf('security') !== -1;
     var wpSnapshot = null;
-    if (wantWordpress || wantSecurity) {
+    if (wantChecklists) {
       await update(scanId, 'wordpress', 90);
       wpSnapshot = await connector.refreshSnapshot(website.id);
-      var wpFindings = wordpressFindings(wpSnapshot, essentialPlugins).filter(function(item) {
-        if (item.category === 'wordpress') return wantWordpress;
-        if (item.category === 'security') return wantSecurity;
-        return false;
-      });
+      var wpFindings = wordpressFindings(wpSnapshot, essentialPlugins, stalenessDays);
       await insertFindings(scanId, null, wpFindings);
       allFindings.push.apply(allFindings, wpFindings);
+    }
+    // Forms audit: enumerate CF7 / WPForms / Elementor forms via the connector
+    // (recipients, cc/bcc, fields) and flag configuration problems. Connector-gated.
+    var formsInventory = null;
+    if (checks.indexOf('forms') !== -1) {
+      await update(scanId, 'forms', 95);
+      var formsData = await connector.fetchForms(website.id);
+      formsInventory = formsData && Array.isArray(formsData.forms) ? formsData.forms : [];
+      var detectedForms = browserPages.reduce(function(sum, page) { return sum + ((page.core && page.core.forms) || []).length; }, 0);
+      var formFindings = formsFindings(formsInventory, detectedForms);
+      await insertFindings(scanId, null, formFindings);
+      allFindings.push.apply(allFindings, formFindings);
     }
     var scanSummary = summary(legacyPages, allFindings, wpSnapshot);
     var audit = {
@@ -212,6 +329,8 @@ async function processScan(scanId) {
       plugins: (wpSnapshot && wpSnapshot.plugins || []).map(function(plugin) { return { name: plugin.name, installedVersion: plugin.version, latestVersion: plugin.latestVersion || plugin.version, updated: !plugin.updateAvailable, lastUpdatedAt: plugin.lastUpdatedAt || null }; }),
       users: (wpSnapshot && wpSnapshot.users || []).map(function(user) { return { name: user.name, role: user.role, email: user.email, lastLoginAt: user.lastLoginAt, passwordUpdatedAt: user.passwordUpdatedAt }; }),
       siteChecks: {}, siteNotes: {}, summary: scanSummary, findings: allFindings,
+      content: wpSnapshot && wpSnapshot.content || null,
+      formsInventory: formsInventory,
     };
     var partial = legacyPages.some(function(page) { return page.speedMobile.performance === 0; }) || allFindings.some(function(item) { return item.checkId === 'page.load'; });
     await db.query(

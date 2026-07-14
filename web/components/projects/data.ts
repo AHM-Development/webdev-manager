@@ -179,3 +179,5 @@ export const STATUS_OPTIONS: ProjectStatus[] = [
   "Site Handed Over",
   "Churned",
 ];
+export const DOMAIN_OPTIONS: DomainManagement[] = ["Client Domain", "Cloudflare"];
+export const SERVER_OPTIONS: ServerLocation[] = ["Client", "Hetzner", "AWS"];

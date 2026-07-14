@@ -135,5 +135,12 @@ module.exports = {
     scanTimeoutMs: numberFromEnv('WEBSITE_HEALTH_SCAN_TIMEOUT_MS', 20 * 60 * 1000),
     pairingTtlMinutes: numberFromEnv('AHM_CORE_PAIRING_TTL_MINUTES', 10),
     publicApiUrl: process.env.PUBLIC_API_URL || 'http://localhost:4000',
+    // DANGER — SSRF escape hatch for local/staging testing ONLY. Comma-separated
+    // hostnames/IPs that bypass the private-network guard (e.g. a LAN IP or a
+    // *.local staging box). Leave EMPTY in production.
+    allowedHosts: (process.env.WEBSITE_HEALTH_ALLOWED_HOSTS || '')
+      .split(',')
+      .map(function(host) { return host.trim().toLowerCase(); })
+      .filter(Boolean),
   },
 };

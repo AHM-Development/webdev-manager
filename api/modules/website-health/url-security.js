@@ -1,6 +1,20 @@
 var dns = require('dns').promises;
 var net = require('net');
 
+var env = require('../../config/env');
+
+// Testing escape hatch: hosts explicitly allowlisted via WEBSITE_HEALTH_ALLOWED_HOSTS
+// bypass the private-network guard. Empty (and thus inert) unless opted in.
+function isAllowedHost(hostname) {
+  return env.websiteHealth.allowedHosts.indexOf(hostname) !== -1;
+}
+
+if (env.websiteHealth.allowedHosts.length) {
+  // eslint-disable-next-line no-console
+  console.warn('[url-security] SSRF private-network guard is BYPASSED for: ' +
+    env.websiteHealth.allowedHosts.join(', ') + ' — never enable this in production.');
+}
+
 function requestError(message, code) {
   var err = new Error(message);
   err.status = 400;
@@ -53,11 +67,14 @@ async function assertSafeUrl(value) {
   }
   if (url.username || url.password) throw requestError('Scan target credentials are not allowed in URLs.');
   var hostname = url.hostname.toLowerCase();
+  var allowed = isAllowedHost(hostname);
   if (
-    hostname === 'localhost' ||
-    hostname.endsWith('.localhost') ||
-    hostname.endsWith('.local') ||
-    hostname === 'metadata.google.internal'
+    !allowed && (
+      hostname === 'localhost' ||
+      hostname.endsWith('.localhost') ||
+      hostname.endsWith('.local') ||
+      hostname === 'metadata.google.internal'
+    )
   ) {
     throw requestError('Private network scan targets are not allowed.');
   }
@@ -67,7 +84,7 @@ async function assertSafeUrl(value) {
   } catch (err) {
     throw requestError('The scan target hostname could not be resolved.', 'SCAN_DNS_FAILED');
   }
-  if (!addresses.length || addresses.some(function(item) { return isPrivateAddress(item.address); })) {
+  if (!allowed && (!addresses.length || addresses.some(function(item) { return isPrivateAddress(item.address); }))) {
     throw requestError('Private or reserved network scan targets are not allowed.');
   }
   return url;

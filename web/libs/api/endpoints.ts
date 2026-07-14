@@ -120,6 +120,7 @@ export const endpoints = {
     website: (websiteId: string) => `/website-health/websites/${websiteId}`,
     history: (websiteId: string) => `/website-health/websites/${websiteId}/history`,
     profile: (websiteId: string) => `/website-health/websites/${websiteId}/profile`,
+    formTest: (websiteId: string) => `/website-health/websites/${websiteId}/forms/test`,
     scans: "/website-health/scans",
     scan: (scanId: string) => `/website-health/scans/${scanId}`,
     cancel: (scanId: string) => `/website-health/scans/${scanId}/cancel`,

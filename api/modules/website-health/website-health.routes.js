@@ -24,5 +24,6 @@ router.get('/websites/:websiteId', controller.latest);
 router.get('/websites/:websiteId/history', controller.history);
 router.get('/websites/:websiteId/profile', controller.getProfile);
 router.patch('/websites/:websiteId/profile', auth.requireRoles(roles.WRITE_ROLES), controller.updateProfile);
+router.post('/websites/:websiteId/forms/test', auth.requireRoles(roles.WRITE_ROLES), controller.sendFormTest);
 
 module.exports = router;

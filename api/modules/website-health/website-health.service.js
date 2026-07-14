@@ -5,7 +5,15 @@ var activity = require('../auth/activity.service');
 var checklists = require('./checklist.service');
 var urlSecurity = require('./url-security');
 
-var ALL_CHECKS = ['lighthouse', 'technical_seo', 'design_qa', 'website_checklists', 'security'];
+var ALL_CHECKS = ['lighthouse', 'technical_seo', 'design_qa', 'website_checklists', 'forms'];
+
+// Recommended baseline plugins used when a website profile hasn't set its own
+// list. Names are matched case-insensitively as substrings, so slight version
+// naming differences (e.g. "UpdraftPlus - Backup/Restore") still match.
+var DEFAULT_ESSENTIAL_PLUGINS = ['Elementor', 'PRO Elements', 'WP Rocket', 'UpdraftPlus', 'Kadence Security Basic', 'WP Activity', 'WP Mail SMTP', 'Rank Math SEO', 'Rank Math SEO PRO', 'AHM Core'];
+
+// Default content-staleness threshold (days) when a profile hasn't set one.
+var DEFAULT_CONTENT_STALENESS_DAYS = 90;
 
 function fail(status, code, message) { var err = new Error(message); err.status = status; err.code = code; throw err; }
 function parseJson(value, fallback) { if (value == null) return fallback; if (typeof value === 'object') return value; try { return JSON.parse(value); } catch (err) { return fallback; } }
@@ -20,7 +28,7 @@ function checkAvailable(check, website) {
   var caps = capabilities();
   if (check === 'lighthouse') return caps.lighthouse;
   if (check === 'technical_seo' || check === 'design_qa') return caps.ai;
-  if (check === 'website_checklists' || check === 'security') return website.connector_status === 'connected';
+  if (check === 'website_checklists' || check === 'forms') return website.connector_status === 'connected';
   return false;
 }
 
@@ -56,7 +64,7 @@ async function websiteRow(websiteId) {
   var rows = await db.query(
     `SELECT pw.*, p.client_name, p.figma_link,
        hp.approved_identity, hp.essential_plugins, hp.form_test_policy, hp.max_pages,
-       hp.figma_comparison_enabled, hp.sitemap_url, hp.default_checks,
+       hp.figma_comparison_enabled, hp.sitemap_url, hp.default_checks, hp.content_staleness_days,
        wc.status AS connector_status, wc.plugin_version, wc.last_heartbeat_at
      FROM project_websites pw
      JOIN projects p ON p.id = pw.project_id AND p.deleted_at IS NULL
@@ -166,6 +174,7 @@ async function getLatest(websiteId) {
       figmaComparisonEnabled: !!website.figma_comparison_enabled,
       sitemapUrl: website.sitemap_url || null,
       defaultChecks: parseJson(website.default_checks, null),
+      contentStalenessDays: website.content_staleness_days != null ? Number(website.content_staleness_days) : null,
     },
     connector: { status: website.connector_status || 'disconnected', pluginVersion: website.plugin_version || null, lastHeartbeatAt: website.last_heartbeat_at || null },
     scan: scan ? mapScan(scan) : null,
@@ -182,7 +191,12 @@ async function history(websiteId, limit) {
 
 async function resolveSitemapUrl(sitemapUrl, website) {
   var value = String(sitemapUrl || '').trim();
-  if (!value) return null;
+  // A sitemap is required. Fall back to the one saved on the website's profile
+  // so re-scans and retries (which may not resend it) still work.
+  if (!value) value = String(website.sitemap_url || '').trim();
+  if (!value) {
+    fail(400, 'SITEMAP_REQUIRED', 'A sitemap URL is required. Add it in the scan dialog first.');
+  }
   await urlSecurity.assertSafeUrl(value);
   if (!urlSecurity.sameRegistrableHost(value, website.url)) {
     fail(400, 'SITEMAP_DOMAIN_MISMATCH', 'The sitemap URL must be on the same domain as the website.');
@@ -270,13 +284,17 @@ async function getProfile(websiteId) {
 async function updateProfile(websiteId, input) {
   await websiteRow(websiteId);
   var maxPages = Math.min(100, Math.max(1, Number(input.maxPages) || 25));
+  var stalenessDays = input.contentStalenessDays == null || input.contentStalenessDays === ''
+    ? null
+    : Math.min(3650, Math.max(1, Number(input.contentStalenessDays) || DEFAULT_CONTENT_STALENESS_DAYS));
   await db.query(
     `INSERT INTO website_health_profiles
-       (website_id, approved_identity, essential_plugins, form_test_policy, max_pages, figma_comparison_enabled)
-     VALUES (:websiteId, :identity, :plugins, :forms, :maxPages, 0)
+       (website_id, approved_identity, essential_plugins, form_test_policy, max_pages, figma_comparison_enabled, content_staleness_days)
+     VALUES (:websiteId, :identity, :plugins, :forms, :maxPages, 0, :staleness)
      ON DUPLICATE KEY UPDATE approved_identity = VALUES(approved_identity), essential_plugins = VALUES(essential_plugins),
-       form_test_policy = VALUES(form_test_policy), max_pages = VALUES(max_pages), figma_comparison_enabled = 0`,
-    { websiteId: websiteId, identity: JSON.stringify(input.approvedIdentity || {}), plugins: JSON.stringify(input.essentialPlugins || []), forms: JSON.stringify(input.formTestPolicy || { mode: 'detect_only', allowedForms: [] }), maxPages: maxPages }
+       form_test_policy = VALUES(form_test_policy), max_pages = VALUES(max_pages), figma_comparison_enabled = 0,
+       content_staleness_days = VALUES(content_staleness_days)`,
+    { websiteId: websiteId, identity: JSON.stringify(input.approvedIdentity || {}), plugins: JSON.stringify(input.essentialPlugins || []), forms: JSON.stringify(input.formTestPolicy || { mode: 'detect_only', allowedForms: [] }), maxPages: maxPages, staleness: stalenessDays }
   );
   return getProfile(websiteId);
 }
@@ -288,4 +306,4 @@ async function report(scanId) {
   return { generatedAt: new Date().toISOString(), scan: mapScan(scan), audit: parseJson(scan.site_result, null), pages: await pages(scanId) };
 }
 
-module.exports = { list: list, getLatest: getLatest, history: history, createScan: createScan, getScan: getScan, cancel: cancel, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, report: report, websiteRow: websiteRow, parseJson: parseJson, capabilities: capabilities };
+module.exports = { list: list, getLatest: getLatest, history: history, createScan: createScan, getScan: getScan, cancel: cancel, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, report: report, websiteRow: websiteRow, parseJson: parseJson, capabilities: capabilities, DEFAULT_ESSENTIAL_PLUGINS: DEFAULT_ESSENTIAL_PLUGINS, DEFAULT_CONTENT_STALENESS_DAYS: DEFAULT_CONTENT_STALENESS_DAYS };

@@ -32,12 +32,12 @@ export function AhmCorePairingModal({
 }) {
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"code" | "url" | null>(null);
 
   useEffect(() => {
     if (!state.isOpen) {
       setPairing(null);
-      setCopied(false);
+      setCopied(null);
     }
   }, [state.isOpen]);
 
@@ -54,11 +54,10 @@ export function AhmCorePairingModal({
     }
   };
 
-  const copyCode = async () => {
-    if (!pairing) return;
-    await navigator.clipboard.writeText(pairing.code);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+  const copy = async (which: "code" | "url", value: string) => {
+    await navigator.clipboard.writeText(value);
+    setCopied(which);
+    window.setTimeout(() => setCopied(null), 1500);
   };
 
   return (
@@ -75,16 +74,29 @@ export function AhmCorePairingModal({
               <ol className="space-y-2 text-sm text-slate-600">
                 <li>1. Download and install AHM Core on this WordPress website.</li>
                 <li>2. Open Settings → AHM Core in WordPress.</li>
-                <li>3. Generate the code below and enter it in the plugin.</li>
+                <li>3. Paste the API URL and pairing code below, then click Connect to AHM.</li>
               </ol>
               {pairing ? (
-                <div className="rounded-md border border-blue-200 bg-blue-50 p-4 text-center">
-                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-blue-700">Pairing code</p>
-                  <button type="button" onClick={copyCode} className="mt-2 inline-flex items-center gap-2 text-3xl font-semibold tracking-[0.2em] text-blue-950">
-                    {pairing.code}
-                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  </button>
-                  <p className="mt-2 text-xs text-blue-700">Expires {new Date(pairing.expiresAt).toLocaleTimeString()}</p>
+                <div className="space-y-3">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Manager API URL</p>
+                    <button
+                      type="button"
+                      onClick={() => void copy("url", pairing.apiUrl)}
+                      className="mt-1 flex w-full items-center justify-between gap-2 text-sm font-medium break-all text-slate-900"
+                    >
+                      <span>{pairing.apiUrl}</span>
+                      {copied === "url" ? <Check className="h-4 w-4 shrink-0" /> : <Copy className="h-4 w-4 shrink-0 text-slate-400" />}
+                    </button>
+                  </div>
+                  <div className="rounded-md border border-blue-200 bg-blue-50 p-4 text-center">
+                    <p className="text-xs font-medium uppercase tracking-[0.12em] text-blue-700">Pairing code</p>
+                    <button type="button" onClick={() => void copy("code", pairing.code)} className="mt-2 inline-flex items-center gap-2 text-3xl font-semibold tracking-[0.2em] text-blue-950">
+                      {pairing.code}
+                      {copied === "code" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    </button>
+                    <p className="mt-2 text-xs text-blue-700">Expires {new Date(pairing.expiresAt).toLocaleTimeString()}</p>
+                  </div>
                 </div>
               ) : (
                 <Button variant="secondary" onPress={() => void generate()} isDisabled={loading}>

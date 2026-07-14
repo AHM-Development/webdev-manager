@@ -40,7 +40,7 @@ const CHECK_LABELS: Record<HealthCheck, string> = {
   technical_seo: "Technical SEO",
   design_qa: "Design QA",
   website_checklists: "Website checklists",
-  security: "Security",
+  forms: "Forms",
 };
 
 const CHECK_HINTS: Record<HealthCheck, string> = {
@@ -48,7 +48,12 @@ const CHECK_HINTS: Record<HealthCheck, string> = {
   technical_seo: "Configure AI in Settings",
   design_qa: "Configure AI in Settings",
   website_checklists: "Connect WordPress first",
-  security: "Connect WordPress first",
+  forms: "Connect WordPress first",
+};
+
+const CHECK_DESCRIPTIONS: Partial<Record<HealthCheck, string>> = {
+  website_checklists: "WordPress maintenance & security (updates, users, HTTPS/headers)",
+  forms: "CF7 / WPForms / Elementor: recipients, fields & delivery config",
 };
 
 function hostOf(url: string) {
@@ -86,7 +91,7 @@ export function StartHealthScanModal({
         technical_seo: false,
         design_qa: false,
         website_checklists: false,
-        security: false,
+        forms: false,
       },
     },
   });
@@ -101,7 +106,7 @@ export function StartHealthScanModal({
       technical_seo: !!capabilities?.ai,
       design_qa: !!capabilities?.ai,
       website_checklists: selected?.connector.status === "connected",
-      security: selected?.connector.status === "connected",
+      forms: selected?.connector.status === "connected",
     }),
     [capabilities, selected]
   );
@@ -141,24 +146,22 @@ export function StartHealthScanModal({
     }
 
     const sitemap = values.sitemapUrl.trim();
-    if (sitemap) {
-      const sitemapHost = hostOf(sitemap);
-      if (!sitemapHost) {
-        form.setError("sitemapUrl", { message: "Enter a valid URL" });
-        return;
-      }
-      if (sitemapHost !== hostOf(site.url)) {
-        form.setError("sitemapUrl", {
-          message: `Sitemap must be on ${hostOf(site.url)}`,
-        });
-        return;
-      }
+    const sitemapHost = hostOf(sitemap);
+    if (!sitemapHost) {
+      form.setError("sitemapUrl", { message: "Enter a valid URL, including https://" });
+      return;
+    }
+    if (sitemapHost !== hostOf(site.url)) {
+      form.setError("sitemapUrl", {
+        message: `Sitemap must be on the same domain as the website (${hostOf(site.url)})`,
+      });
+      return;
     }
 
     const selectedChecks = HEALTH_CHECKS.filter((key) => values.checks[key]);
     await onStart(values.websiteId, {
       checks: selectedChecks,
-      sitemapUrl: sitemap || undefined,
+      sitemapUrl: sitemap,
     });
     close();
   });
@@ -223,13 +226,13 @@ export function StartHealthScanModal({
                       onBlur={field.onBlur}
                       isInvalid={!!fieldState.error}
                     >
-                      <Label>Sitemap URL (optional)</Label>
+                      <Label>Sitemap URL</Label>
                       <Input
                         className="w-full"
                         placeholder={selected ? `https://${hostOf(selected.url)}/sitemap.xml` : "https://example.com/sitemap.xml"}
                       />
                       <p className="mt-1 text-xs text-slate-500">
-                        Saved for next time. Must be on the same domain as the website; leave blank to auto-discover.
+                        Required. Must be on the same domain as the website. Saved to the client and pre-filled next time.
                       </p>
                       {fieldState.error && <p className="mt-1 text-sm text-red-600">{fieldState.error.message}</p>}
                     </TextField>
@@ -257,6 +260,9 @@ export function StartHealthScanModal({
                           />
                           <span className="min-w-0">
                             <span className="text-sm font-medium text-slate-800">{CHECK_LABELS[key]}</span>
+                            {available && CHECK_DESCRIPTIONS[key] && (
+                              <span className="block text-xs text-slate-500">{CHECK_DESCRIPTIONS[key]}</span>
+                            )}
                             {!available && (
                               <span className="block text-xs text-slate-400">{CHECK_HINTS[key]}</span>
                             )}

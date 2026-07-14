@@ -6,7 +6,7 @@ export const healthChecksSchema = z
     technical_seo: z.boolean(),
     design_qa: z.boolean(),
     website_checklists: z.boolean(),
-    security: z.boolean(),
+    forms: z.boolean(),
   })
   .refine((checks) => Object.values(checks).some(Boolean), {
     message: "Select at least one check to run",
@@ -14,7 +14,7 @@ export const healthChecksSchema = z
 
 export const startHealthScanSchema = z.object({
   websiteId: z.string().min(1, "Select a website"),
-  sitemapUrl: z.string(),
+  sitemapUrl: z.string().trim().min(1, "Sitemap URL is required"),
   checks: healthChecksSchema,
 });
 
@@ -25,6 +25,7 @@ export const websiteHealthProfileSchema = z.object({
   approvedNames: z.string(),
   essentialPlugins: z.string(),
   maxPages: z.number().int().min(1).max(100),
+  contentStalenessDays: z.number().int().min(1).max(3650),
 });
 
 export type WebsiteHealthProfileValues = z.infer<typeof websiteHealthProfileSchema>;

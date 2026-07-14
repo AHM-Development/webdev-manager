@@ -32,11 +32,14 @@ import {
   type WebsiteHealthProfileValues,
 } from "./schema";
 
+const DEFAULT_ESSENTIAL_PLUGINS = ["Elementor", "PRO Elements", "WP Rocket", "UpdraftPlus", "Kadence Security Basic", "WP Activity", "WP Mail SMTP", "Rank Math SEO", "Rank Math SEO PRO", "AHM Core"];
+
 const defaults: WebsiteHealthProfileValues = {
   organizationName: "",
   approvedNames: "",
-  essentialPlugins: "",
+  essentialPlugins: DEFAULT_ESSENTIAL_PLUGINS.join("\n"),
   maxPages: 25,
+  contentStalenessDays: 90,
 };
 
 function lines(value: unknown) {
@@ -70,8 +73,11 @@ export function WebsiteHealthProfileModal({
         reset({
           organizationName: String(identity.organizationName || ""),
           approvedNames: lines(identity.approvedNames),
-          essentialPlugins: detail.profile.essentialPlugins.join("\n"),
+          essentialPlugins: detail.profile.essentialPlugins.length
+            ? detail.profile.essentialPlugins.join("\n")
+            : DEFAULT_ESSENTIAL_PLUGINS.join("\n"),
           maxPages: detail.profile.maxPages,
+          contentStalenessDays: detail.profile.contentStalenessDays ?? 90,
         });
       })
       .catch((error) => {
@@ -92,6 +98,7 @@ export function WebsiteHealthProfileModal({
         essentialPlugins: values.essentialPlugins.split("\n").map((value) => value.trim()).filter(Boolean),
         formTestPolicy: { mode: "detect_only", allowedForms: [] },
         maxPages: values.maxPages,
+        contentStalenessDays: values.contentStalenessDays,
         figmaComparisonEnabled: false,
       });
       notify.success("Website scan settings saved");
@@ -123,7 +130,15 @@ export function WebsiteHealthProfileModal({
                 )} />
                 <Controller control={control} name="essentialPlugins" render={({ field, fieldState }) => (
                   <TextField value={field.value} onChange={field.onChange} onBlur={field.onBlur} isInvalid={!!fieldState.error}>
-                    <Label>Essential WordPress plugins</Label><TextArea ref={field.ref} rows={4} className="w-full resize-y" placeholder="One exact plugin name per line" />
+                    <Label>Essential WordPress plugins</Label><TextArea ref={field.ref} rows={4} className="w-full resize-y" placeholder="One plugin name per line" />
+                    <p className="mt-1 text-xs text-slate-500">One plugin name per line (matched case-insensitively). Pre-filled with the recommended baseline — edit to match this site&apos;s stack.</p>
+                  </TextField>
+                )} />
+                <Controller control={control} name="contentStalenessDays" render={({ field, fieldState }) => (
+                  <TextField value={String(field.value)} onChange={(value) => field.onChange(Number(value))} onBlur={field.onBlur} isInvalid={!!fieldState.error} type="number">
+                    <Label>Content staleness threshold (days)</Label><Input ref={field.ref} min={1} max={3650} />
+                    <p className="mt-1 text-xs text-slate-500">Warn when no blog post or content update has happened within this many days. Default 90.</p>
+                    {fieldState.error && <p className="mt-1 text-sm text-red-600">{fieldState.error.message}</p>}
                   </TextField>
                 )} />
                 <Controller control={control} name="maxPages" render={({ field, fieldState }) => (

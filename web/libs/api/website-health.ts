@@ -30,20 +30,22 @@ export type HealthScan = {
   completedAt: string | null;
 };
 
-/** The five selectable scan checks. */
+/** The five selectable scan checks. "website_checklists" covers WordPress
+ *  maintenance and security; "forms" audits WP form plugins (both need the
+ *  paired connector). */
 export type HealthCheck =
   | "lighthouse"
   | "technical_seo"
   | "design_qa"
   | "website_checklists"
-  | "security";
+  | "forms";
 
 export const HEALTH_CHECKS: HealthCheck[] = [
   "lighthouse",
   "technical_seo",
   "design_qa",
   "website_checklists",
-  "security",
+  "forms",
 ];
 
 export type HealthCapabilities = { lighthouse: boolean; ai: boolean };
@@ -70,6 +72,7 @@ export type WebsiteHealthDetail = {
     figmaComparisonEnabled: false;
     sitemapUrl: string | null;
     defaultChecks: HealthCheck[] | null;
+    contentStalenessDays: number | null;
   };
   connector: { status: string; pluginVersion: string | null; lastHeartbeatAt: string | null };
   scan: HealthScan | null;
@@ -135,9 +138,17 @@ export async function createWordPressPairingCode(websiteId: string) {
   const { data } = await apiClient.post<{
     code: string;
     expiresAt: string;
+    apiUrl: string;
     website: { id: string; name: string; url: string };
   }>(endpoints.wordpressConnector.pairingCode(websiteId));
   return data;
+}
+
+export async function sendFormTest(websiteId: string, formId: string, to: string) {
+  const { data } = await apiClient.post<{
+    result: { sent: boolean; to?: string; form?: string; plugin?: string; error?: string };
+  }>(endpoints.websiteHealth.formTest(websiteId), { formId, to });
+  return data.result;
 }
 
 export async function updateWebsiteHealthProfile(

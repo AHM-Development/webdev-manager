@@ -1,48 +1,41 @@
-# AHM Design and Content QA Checklist
+# AHM Design QA Checklist (visual)
 
-Version: 1.0.0
+Version: 2.0.0
 
-Review each page at mobile, tablet, and desktop. Use screenshots together with DOM, CSS, console, and network evidence. Do not report subjective preferences as defects.
+Review each page at mobile, tablet, and desktop using the screenshots together with the DOM/CSS measurements supplied as evidence (overflow, overlap, clipped boxes, off-viewport elements, tap-target sizes, small text, and the design-token census). This is a **visual** review — layout, responsiveness, and design consistency only. **Do not review content correctness** (grammar, identity, copy) here; that is handled elsewhere. Do not report subjective preferences as defects, and do not contradict the deterministic measurements.
 
-## Rendering and layout
+## Layout & distortion
 
 - `design.horizontal-overflow`: No unintended horizontal scrolling or content outside the viewport.
 - `design.overlap`: Text, controls, headers, dialogs, and media do not overlap incoherently.
 - `design.clipping`: Text and interactive controls are not clipped, truncated, or hidden unintentionally.
+- `design.off-viewport`: No elements spill past the viewport edge.
 - `design.broken-media`: Images, videos, icons, fonts, and embeds render successfully.
-- `design.empty-sections`: No unexplained blank bands, collapsed containers, or missing content blocks.
-- `design.responsive-order`: Reading order and section order remain logical at every viewport.
-- `design.navigation`: Navigation remains visible, usable, and free of wrapping or collision defects.
-- `design.forms`: Labels, inputs, errors, consent text, and submit controls align and remain usable.
+- `design.empty-sections`: No unexplained blank bands, collapsed containers, or missing blocks.
 
-## Typography and visual consistency
+## Responsiveness (mobile & tablet)
 
-- `design.font-family`: Font families match the established page system; fallback fonts are flagged when caused by load failure.
-- `design.font-scale`: Heading and body hierarchy is consistent and appropriate to its container.
-- `design.line-height`: Text remains readable without collisions or excessive spacing.
-- `design.button-consistency`: Equivalent actions use consistent styling, sizing, radius, and icon treatment.
-- `design.spacing`: Repeated components and sections use consistent alignment, gaps, and padding.
-- `design.color-contrast`: Text and controls have adequate visual contrast; evidence should identify the affected element.
+- `design.responsive-order`: Reading order and section order stay logical at every viewport.
+- `design.navigation`: Navigation stays visible and usable (collapses to a working menu) without wrapping/collision.
+- `design.tap-targets`: Interactive targets are large enough and adequately spaced on touch viewports.
+- `design.text-too-small`: Body text remains legible on mobile.
+- `design.reflow`: Multi-column layouts stack sensibly; nothing requires horizontal scrolling.
 
-## Content correctness
+## Design consistency
 
-- `content.placeholder`: Detect lorem ipsum, dummy text, TODO markers, template copy, sample addresses, and placeholder contact details.
-- `content.identity`: Doctor, clinic, company, person, location, phone, and email references match the approved website profile.
-- `content.unrelated-name`: Detect names or organizations belonging to another project or template.
-- `content.inconsistency`: Repeated identity, service, price, date, or contact facts do not contradict one another.
-- `content.grammar`: Flag clear spelling, grammar, malformed punctuation, duplicated words, and incomplete sentences; avoid style-only rewrites.
-- `content.broken-copy`: Detect unresolved merge tags, shortcodes, HTML fragments, encoding errors, and raw JSON.
-- `content.relevance`: Headings and body content are relevant to the page purpose and approved business profile.
-- `content.legal`: Required privacy, consent, cookie, and regulated-content notices are present when the captured page context makes them applicable.
+- `design.font-scale`: Font sizes follow a consistent type scale.
+- `design.font-family`: Font families match the established system; flag fallback fonts caused by load failure.
+- `design.line-height`: Text is readable without collisions or excessive spacing.
+- `design.spacing`: Repeated components/sections use consistent alignment, gaps, and padding.
+- `design.radius-consistency`: Corner radii are consistent across similar components.
+- `design.button-consistency`: Equivalent actions share styling, sizing, radius, and icon treatment.
+- `design.color-consistency`: Colors come from a coherent palette; flag near-duplicate or off-system colors.
+- `design.color-contrast`: Text and controls have adequate contrast; identify the affected element.
 
 ## Automated evidence
 
-Treat browser-reported failed resources, console errors, broken image dimensions, overflow measurements, clipped bounding boxes, and font-load failures as high-confidence evidence. Claude may add context but must not contradict deterministic evidence.
-
-## Figma comparison
-
-Deferred. Do not calculate or invent a Figma match score until a Figma frame is explicitly mapped to the page and the comparison feature is enabled.
+Treat browser-reported overflow, overlap, clipped / off-viewport boxes, tap-target sizes, small-text measurements, failed resources, broken image dimensions, font-load failures, and the design-token census as high-confidence evidence. Claude may add visual context but must not contradict it.
 
 ## Finding contract
 
-Return `checkId`, `severity`, `viewport`, `title`, `detail`, `evidence`, `recommendation`, and `confidence`. Severity is `info`, `warning`, or `critical`. Viewport is `mobile`, `tablet`, `desktop`, or `all`.
+Return `checkId`, `severity` (`info`|`warning`|`critical`), `viewport` (`mobile`|`tablet`|`desktop`|`all`), `title`, `detail`, `evidence`, `recommendation`, `confidence`. Report only visual/layout/consistency issues — no content, grammar, or identity findings.

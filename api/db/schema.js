@@ -710,6 +710,7 @@ async function ensureSchema() {
   // checks to run, remembered per website and recorded on each scan.
   await alterIgnoreDuplicate('ALTER TABLE website_health_profiles ADD COLUMN sitemap_url VARCHAR(1024) NULL AFTER max_pages');
   await alterIgnoreDuplicate('ALTER TABLE website_health_profiles ADD COLUMN default_checks JSON NULL AFTER sitemap_url');
+  await alterIgnoreDuplicate('ALTER TABLE website_health_profiles ADD COLUMN content_staleness_days INT UNSIGNED NULL AFTER default_checks');
   await alterIgnoreDuplicate('ALTER TABLE website_health_scans ADD COLUMN selected_checks JSON NULL AFTER checklist_versions');
   await alterIgnoreDuplicate('ALTER TABLE website_health_scans ADD COLUMN sitemap_url VARCHAR(1024) NULL AFTER selected_checks');
 
@@ -721,14 +722,18 @@ async function ensureSchema() {
        'You are a rigorous technical SEO QA reviewer. Use only supplied evidence and the checklist. Return no finding without evidence.',
        'Review this page evidence against the checklist and return the required JSON.\n\nCHECKLIST:\n{{checklist}}\n\nEVIDENCE:\n{{evidence}}',
        NULL, 0.10, 3000, 1),
-      ('website_design_content_qa', 'Website Design and Content QA',
-       'You are a rigorous website design and content QA reviewer. Use supplied screenshots, browser evidence, approved identity, and checklist. Do not invent defects.',
-       'Review this page against the checklist and approved identity. Return the required JSON.\n\nCHECKLIST:\n{{checklist}}\n\nAPPROVED IDENTITY:\n{{identity}}\n\nEVIDENCE:\n{{evidence}}',
+      ('website_design_content_qa', 'Website Design QA (visual)',
+       'You are a rigorous website visual QA reviewer. Judge layout distortion, mobile/tablet responsiveness, and design consistency using the supplied screenshots and browser measurements. Do not review content, grammar, or identity. Do not invent defects or contradict the deterministic measurements.',
+       'Review this page against the visual checklist and return the required JSON (visual/layout/consistency findings only).\n\nCHECKLIST:\n{{checklist}}\n\nEVIDENCE:\n{{evidence}}',
        NULL, 0.10, 3000, 1),
       ('website_lighthouse_review', 'Website Lighthouse Review',
        'You are a web performance engineer. Use only the supplied Lighthouse metrics and page evidence; recommend concrete fixes. Do not invent metrics.',
        'Interpret these Lighthouse results for the page and return the required JSON findings (category performance). Prioritise the highest-impact fixes.\n\nMETRICS:\n{{metrics}}\n\nEVIDENCE:\n{{evidence}}',
-       NULL, 0.10, 3000, 1)
+       NULL, 0.10, 3000, 1),
+      ('website_placeholder_content', 'Website Placeholder Content',
+       'You detect placeholder, dummy, filler, or unfinished website copy (e.g. lorem ipsum, "insert tagline here", half-written sentences, template leftovers). Use only the supplied page text. Flag only text that is clearly not final, production content. Return no finding without quoting the offending text as evidence.',
+       'Analyse the visible page text and return the required JSON findings (checkId "seo.placeholder-content") for any placeholder or unfinished content. If the copy looks like finished, real content, return an empty findings array.\n\nEVIDENCE:\n{{evidence}}',
+       NULL, 0.10, 2000, 1)
   `);
 }
 

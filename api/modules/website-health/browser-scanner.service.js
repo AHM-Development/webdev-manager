@@ -93,6 +93,20 @@ async function scanPage(browser, scanId, pageUrl, pageIndex) {
   page.on('requestfailed', function(request) {
     networkErrors.push({ url: request.url(), error: request.failure() && request.failure().errorText });
   });
+  // Capture per-image transfer size + content-type for the SEO image checks
+  // (independent of Lighthouse). Header-based only — no body reads.
+  var imageResponses = new Map();
+  page.on('response', function(resp) {
+    try {
+      if (resp.request().resourceType() !== 'image') return;
+      var responseHeaders = resp.headers() || {};
+      var length = Number(responseHeaders['content-length']);
+      imageResponses.set(resp.url(), {
+        bytes: Number.isFinite(length) && length > 0 ? length : null,
+        contentType: responseHeaders['content-type'] || null,
+      });
+    } catch (err) { /* ignore per-response errors */ }
+  });
 
   var response = await page.goto(pageUrl, {
     waitUntil: 'networkidle',
@@ -120,6 +134,7 @@ async function scanPage(browser, scanId, pageUrl, pageIndex) {
         declaredWidth: image.getAttribute('width'),
         declaredHeight: image.getAttribute('height'),
         complete: image.complete,
+        renderedWidth: Math.round(image.getBoundingClientRect().width),
       };
     });
     var links = Array.from(document.querySelectorAll('a[href]')).slice(0, 500).map(function(link) {
@@ -171,20 +186,56 @@ async function scanPage(browser, scanId, pageUrl, pageIndex) {
     await page.setViewportSize(viewport);
     await page.waitForTimeout(350);
     var layout = await page.evaluate(function() {
-      var candidates = Array.from(document.querySelectorAll('h1,h2,h3,p,a,button,input,select,textarea,img')).slice(0, 700);
+      var vw = innerWidth;
+      var interactive = { A: 1, BUTTON: 1, INPUT: 1, SELECT: 1, TEXTAREA: 1 };
+      var textTags = { P: 1, SPAN: 1, LI: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, A: 1 };
+      var candidates = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,a,button,input,select,textarea,img,span,li')).slice(0, 700);
       var clipped = [];
       var fonts = {};
+      var offViewport = [];
+      var smallText = [];
+      var tinyTapTargets = [];
+      var boxes = [];
+      function shortText(element) {
+        return (element.textContent || element.getAttribute('aria-label') || '').trim().slice(0, 80);
+      }
       candidates.forEach(function(element) {
         var rect = element.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
         var style = getComputedStyle(element);
-        if (rect.width > 0 && rect.height > 0) {
-          var family = style.fontFamily || 'unknown';
-          fonts[family] = (fonts[family] || 0) + 1;
-          if (element.scrollWidth > element.clientWidth + 2 || element.scrollHeight > element.clientHeight + 2) {
-            clipped.push({ tag: element.tagName, text: (element.textContent || element.getAttribute('aria-label') || '').trim().slice(0, 120) });
-          }
+        fonts[style.fontFamily || 'unknown'] = (fonts[style.fontFamily || 'unknown'] || 0) + 1;
+        if (element.scrollWidth > element.clientWidth + 2 || element.scrollHeight > element.clientHeight + 2) {
+          clipped.push({ tag: element.tagName, text: shortText(element) });
+        }
+        if (rect.right > vw + 3) {
+          offViewport.push({ tag: element.tagName, text: shortText(element), overflowPx: Math.round(rect.right - vw) });
+        }
+        var fontSize = parseFloat(style.fontSize) || 0;
+        if (textTags[element.tagName] && (element.textContent || '').trim() && fontSize > 0 && fontSize < 12) {
+          smallText.push({ tag: element.tagName, size: Math.round(fontSize), text: shortText(element) });
+        }
+        if (interactive[element.tagName] && Math.min(rect.width, rect.height) < 40) {
+          tinyTapTargets.push({ tag: element.tagName, size: Math.round(Math.min(rect.width, rect.height)), text: shortText(element) });
+        }
+        if (interactive[element.tagName] || textTags[element.tagName]) {
+          boxes.push({ el: element, rect: rect });
         }
       });
+      var overlaps = [];
+      var pool = boxes.slice(0, 200);
+      for (var i = 0; i < pool.length && overlaps.length < 15; i += 1) {
+        for (var j = i + 1; j < pool.length && overlaps.length < 15; j += 1) {
+          var a = pool[i], b = pool[j];
+          if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
+          var ix = Math.max(0, Math.min(a.rect.right, b.rect.right) - Math.max(a.rect.left, b.rect.left));
+          var iy = Math.max(0, Math.min(a.rect.bottom, b.rect.bottom) - Math.max(a.rect.top, b.rect.top));
+          var overlapArea = ix * iy;
+          var minArea = Math.min(a.rect.width * a.rect.height, b.rect.width * b.rect.height);
+          if (overlapArea > 0 && minArea > 0 && overlapArea / minArea > 0.35) {
+            overlaps.push({ a: shortText(a.el) || a.el.tagName, b: shortText(b.el) || b.el.tagName });
+          }
+        }
+      }
       return {
         viewport: { width: innerWidth, height: innerHeight },
         documentWidth: document.documentElement.scrollWidth,
@@ -192,6 +243,10 @@ async function scanPage(browser, scanId, pageUrl, pageIndex) {
         clippedElements: clipped.slice(0, 30),
         fontFamilies: fonts,
         brokenImages: Array.from(document.images).filter(function(image) { return image.complete && image.naturalWidth === 0; }).map(function(image) { return image.src; }).slice(0, 30),
+        overlaps: overlaps,
+        offViewport: offViewport.slice(0, 20),
+        smallText: smallText.slice(0, 20),
+        tinyTapTargets: tinyTapTargets.slice(0, 20),
       };
     });
     var fileName = String(pageIndex + 1) + '-' + slug(new URL(finalUrl).pathname) + '-' + viewportName + '.png';
@@ -199,6 +254,44 @@ async function scanPage(browser, scanId, pageUrl, pageIndex) {
     layout.screenshot = '/health-scans/' + scanId + '/' + fileName;
     layouts[viewportName] = layout;
   }
+
+  (core.images || []).forEach(function(image) {
+    var meta = imageResponses.get(image.src);
+    if (meta) {
+      image.bytes = meta.bytes;
+      image.contentType = meta.contentType;
+    }
+  });
+
+  // Page-level design-token census (runs once, at the final/desktop viewport)
+  // for the deterministic design-consistency checks.
+  var designTokens = await page.evaluate(function() {
+    var fontSizes = {}, fontFamilies = {}, textColors = {}, backgroundColors = {}, borderRadii = {};
+    function bump(map, key) { if (key) map[key] = (map[key] || 0) + 1; }
+    Array.from(document.querySelectorAll('*')).slice(0, 3000).forEach(function(element) {
+      var rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      var style = getComputedStyle(element);
+      var hasText = false;
+      for (var n = 0; n < element.childNodes.length; n += 1) {
+        if (element.childNodes[n].nodeType === 3 && element.childNodes[n].textContent.trim()) { hasText = true; break; }
+      }
+      if (hasText) {
+        bump(fontSizes, Math.round(parseFloat(style.fontSize) || 0) + 'px');
+        bump(fontFamilies, String(style.fontFamily || '').split(',')[0].replace(/["']/g, '').trim());
+        bump(textColors, style.color);
+      }
+      if (style.backgroundColor && style.backgroundColor !== 'rgba(0, 0, 0, 0)' && style.backgroundColor !== 'transparent') {
+        bump(backgroundColors, style.backgroundColor);
+      }
+      if (style.borderRadius && style.borderRadius !== '0px') bump(borderRadii, style.borderRadius);
+    });
+    var buttons = Array.from(document.querySelectorAll('button, .btn, [role="button"], a.button')).slice(0, 40).map(function(button) {
+      var style = getComputedStyle(button);
+      return { padding: style.padding, borderRadius: style.borderRadius, fontSize: style.fontSize, background: style.backgroundColor };
+    });
+    return { fontSizes: fontSizes, fontFamilies: fontFamilies, textColors: textColors, backgroundColors: backgroundColors, borderRadii: borderRadii, buttons: buttons };
+  });
 
   await context.close();
   return {
@@ -210,6 +303,7 @@ async function scanPage(browser, scanId, pageUrl, pageIndex) {
     headers: headers,
     core: core,
     layouts: layouts,
+    designTokens: designTokens,
     consoleErrors: unique(consoleErrors).slice(0, 50),
     networkErrors: networkErrors.slice(0, 50),
     internalLinks: unique(core.links.filter(function(link) { return sameOrigin(link.href, finalUrl); }).map(function(link) { return link.href.split('#')[0]; })),

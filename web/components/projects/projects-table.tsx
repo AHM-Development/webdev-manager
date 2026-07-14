@@ -16,9 +16,10 @@ import {
   useOverlayState,
 } from "@heroui/react";
 import {
+  Download,
   ExternalLink,
   Upload,
-  Pencil,
+  Eye,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -40,9 +41,11 @@ import {
   type ProjectPayload,
 } from "@/libs/api/projects";
 import { notify } from "@/libs/notify";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SearchableFilter } from "@/components/ui/searchable-filter";
 
 import { CreateProjectModal } from "./create-project-modal";
+import { ExportProjectsModal } from "./export-projects-modal";
 import { ImportProjectsModal } from "./import-projects-modal";
 import {
   PRIORITY_OPTIONS,
@@ -120,7 +123,7 @@ function PriorityProjectTable({
   projects: Project[];
   onDrop: (ids: string[]) => void;
   onEdit: (project: Project) => void;
-  onDelete: (id: string) => void;
+  onDelete: (project: Project) => void;
 }) {
   const { dragAndDropHooks } = useDragAndDrop({
     getItems: (keys) =>
@@ -299,17 +302,17 @@ function PriorityProjectTable({
                       isIconOnly
                       size="sm"
                       variant="ghost"
-                      aria-label={`Edit ${project.clientName}`}
+                      aria-label={`View ${project.clientName}`}
                       onPress={() => onEdit(project)}
                     >
-                      <Pencil className="h-4 w-4" />
+                      <Eye className="h-4 w-4" />
                     </Button>
                     <Button
                       isIconOnly
                       size="sm"
                       variant="ghost"
                       aria-label={`Delete ${project.clientName}`}
-                      onPress={() => onDelete(project.id)}
+                      onPress={() => onDelete(project)}
                     >
                       <Trash2 className="h-4 w-4 text-red-600" />
                     </Button>
@@ -338,8 +341,16 @@ export function ProjectsTable() {
 
   const createState = useOverlayState();
   const importState = useOverlayState();
+  const exportState = useOverlayState();
   const editState = useOverlayState();
+  const confirmDeleteState = useOverlayState();
   const [selected, setSelected] = useState<Project | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
+
+  const requestDelete = (project: Project) => {
+    setPendingDelete(project);
+    confirmDeleteState.open();
+  };
 
   useEffect(() => {
     let active = true;
@@ -441,6 +452,7 @@ export function ProjectsTable() {
       const message = (err as Error).message ?? "Could not delete project.";
       setError(message);
       notify.error("Could not delete project", { description: message });
+      throw err;
     }
   };
 
@@ -497,6 +509,10 @@ export function ProjectsTable() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          <Button variant="tertiary" onPress={exportState.open}>
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
           <Button variant="tertiary" onPress={importState.open}>
             <Upload className="h-4 w-4" />
             Import Bulk
@@ -549,7 +565,7 @@ export function ProjectsTable() {
                   projects={group.rows}
                   onDrop={(ids) => handlePriorityChange(ids, group.priority)}
                   onEdit={handleEdit}
-                  onDelete={handleDelete}
+                  onDelete={requestDelete}
                 />
               </div>
             </section>
@@ -563,6 +579,27 @@ export function ProjectsTable() {
         onCreate={handleCreate}
       />
       <ImportProjectsModal state={importState} onImport={handleImport} />
+      <ExportProjectsModal state={exportState} projects={list} />
+      <ConfirmDialog
+        state={confirmDeleteState}
+        destructive
+        title="Delete this project?"
+        confirmLabel="Delete project"
+        description={
+          pendingDelete ? (
+            <>
+              You&apos;re about to permanently delete{" "}
+              <strong className="text-slate-900">{pendingDelete.clientName}</strong> and its
+              associated websites and data. This action cannot be undone.
+            </>
+          ) : (
+            ""
+          )
+        }
+        onConfirm={async () => {
+          if (pendingDelete) await handleDelete(pendingDelete.id);
+        }}
+      />
       <ProjectDetailDrawer
         project={selected}
         state={editState}

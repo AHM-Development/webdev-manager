@@ -29,6 +29,48 @@ export type PageSpeed = {
   renderBlockingResources: number;
 };
 
+// Rich PageSpeed Insights payload (mobile + desktop) captured per page.
+export type LighthouseFieldMetric = { value: number; category: string | null };
+export type LighthouseFieldData = {
+  overall: string | null;
+  lcp: LighthouseFieldMetric | null;
+  inp: LighthouseFieldMetric | null;
+  cls: LighthouseFieldMetric | null;
+  fcp: LighthouseFieldMetric | null;
+  ttfb: LighthouseFieldMetric | null;
+};
+export type LighthouseDiagnostic = {
+  id: string;
+  group: "opportunity" | "diagnostic";
+  title: string;
+  displayValue: string;
+  savingsMs: number | null;
+  score: number | null;
+};
+export type LighthouseStrategyResult = {
+  scores: {
+    performance: number | null;
+    accessibility: number | null;
+    bestPractices: number | null;
+    seo: number | null;
+  };
+  metrics: {
+    lcpMs: number | null;
+    cls: number | null;
+    tbtMs: number | null;
+    fcpMs: number | null;
+    speedIndexMs: number | null;
+    interactiveMs: number | null;
+  };
+  fieldData: LighthouseFieldData | null;
+  diagnostics: LighthouseDiagnostic[];
+};
+export type LighthouseResult = {
+  status: string;
+  mobile: LighthouseStrategyResult | null;
+  desktop: LighthouseStrategyResult | null;
+};
+
 export type ImageIssue =
   | "not-webp"
   | "missing-alt"
@@ -89,6 +131,7 @@ export type PageAudit = {
   path: string;
   speedMobile: PageSpeed;
   speedDesktop: PageSpeed;
+  lighthouse?: LighthouseResult;
   images: PageImage[];
   seoChecks: Record<string, CheckStatus>;
   seoNotes: Record<string, string>;
@@ -106,6 +149,20 @@ export type ScanFinding = {
   title: string;
   status: CheckStatus;
   detail: string;
+};
+
+/** A full finding as emitted by the scan engine (category-tagged). Carried on
+ *  the audit so the drawer can group them (e.g. security under Website checklists). */
+export type HealthFinding = {
+  category: string;
+  checkId: string;
+  severity: "info" | "warning" | "critical";
+  viewport?: string;
+  title: string;
+  detail: string;
+  evidence?: string;
+  recommendation?: string;
+  confidence?: string;
 };
 
 export type WordPressPlugin = {
@@ -144,6 +201,32 @@ export type SiteAudit = {
   users: WordPressUser[];
   siteChecks: Record<string, CheckStatus>;
   siteNotes: Record<string, string>;
+  findings?: HealthFinding[];
+  content?: {
+    lastModifiedAt: string | null;
+    lastPostPublishedAt: string | null;
+    firstPostPublishedAt: string | null;
+    publishedPosts: number;
+    draftPosts: number;
+    publishedPages: number;
+  } | null;
+  formsInventory?: FormInventoryItem[] | null;
+};
+
+/** A form enumerated server-side by the connector (CF7 / WPForms / Elementor),
+ *  with its recipients and fields. Recipients/CC/BCC are not visible from HTML. */
+export type FormInventoryItem = {
+  plugin: string;
+  id: string;
+  title: string;
+  recipients: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  from: string;
+  fields: { name: string; type: string; required: boolean }[];
+  locator: string | null;
+  pageUrl: string | null;
 };
 
 export type ProjectHealth = {

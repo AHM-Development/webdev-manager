@@ -2,7 +2,6 @@
 
 import {
   Button,
-  Chip,
   Dropdown,
   Pagination,
   PaginationContent,
@@ -103,6 +102,86 @@ function toProject(row: HealthWebsiteRow): Project {
   };
 }
 
+/** Maps a scan stage to a short, friendly phrase for the progress UI. */
+const STAGE_PHRASES: Record<string, string> = {
+  queued: "Queued",
+  starting: "Getting ready…",
+  crawling: "Crawling pages…",
+  analyzing_page: "Analysing pages…",
+  site_checks: "Checking site-wide SEO…",
+  wordpress: "Running WordPress checks…",
+  forms: "Checking forms…",
+  completed: "Done",
+  failed: "Scan failed",
+  cancelled: "Cancelled",
+};
+
+function stagePhrase(stage: string) {
+  return STAGE_PHRASES[stage] ?? "Scanning…";
+}
+
+type ActiveScanItem = {
+  id: string;
+  name: string;
+  host: string;
+  phrase: string;
+  progress: number;
+  queued: boolean;
+};
+
+function ActiveScansPanel({ scans }: { scans: ActiveScanItem[] }) {
+  if (!scans.length) return null;
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center gap-2.5 border-b border-slate-100 px-4 py-3">
+        <span className="text-sm font-semibold text-slate-900">Active scans</span>
+        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold tabular-nums text-blue-700">
+          {scans.length} of 5
+        </span>
+        <span className="ml-auto text-xs text-slate-400">New scans queue until a slot frees</span>
+      </div>
+      <div>
+        {scans.map((scan) => (
+          <div
+            key={scan.id}
+            className="grid grid-cols-[1fr_auto] items-baseline gap-x-3 gap-y-2 border-b border-slate-100 px-4 py-3.5 last:border-b-0"
+          >
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                {scan.name}
+                <span className="truncate text-xs font-normal text-slate-400">{scan.host}</span>
+              </div>
+              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                <span
+                  className={`h-2 w-2 flex-none rounded-full ${
+                    scan.queued ? "bg-slate-300" : "animate-pulse bg-blue-500"
+                  }`}
+                />
+                {scan.phrase}
+              </div>
+            </div>
+            {scan.queued ? (
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Queued</span>
+            ) : (
+              <span className="text-sm font-semibold tabular-nums text-blue-700">{scan.progress}%</span>
+            )}
+            <div className="col-span-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+              {scan.queued ? (
+                <div className="h-full w-1/3 animate-pulse rounded-full bg-slate-300" />
+              ) : (
+                <div
+                  className="h-full rounded-full bg-blue-600 transition-all"
+                  style={{ width: `${scan.progress}%` }}
+                />
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function WebsiteHealthTable() {
   const drawer = useOverlayState();
   const exportModal = useOverlayState();
@@ -162,9 +241,21 @@ export function WebsiteHealthTable() {
     scanModal.open();
   };
 
-  const hasActiveScan = rows.some((row) =>
-    row.latestScan ? ACTIVE_SCAN_STATUSES.has(row.latestScan.status) : false
-  );
+  const activeScans: ActiveScanItem[] = rows
+    .filter((row) => row.latestScan && ACTIVE_SCAN_STATUSES.has(row.latestScan.status))
+    .map((row) => {
+      const scan = row.latestScan!;
+      const queued = scan.status === "queued";
+      return {
+        id: row.id,
+        name: row.name,
+        host: hostOf(row.url),
+        phrase: queued ? "Queued — starts when a slot frees" : stagePhrase(scan.stage),
+        progress: scan.progress ?? 0,
+        queued,
+      };
+    });
+  const hasActiveScan = activeScans.length > 0;
 
   useEffect(() => {
     if (!hasActiveScan) return;
@@ -230,6 +321,8 @@ export function WebsiteHealthTable() {
         </Button>
       </div>
 
+      <ActiveScansPanel scans={activeScans} />
+
       <div className="grid gap-3 md:grid-cols-5">
         {[
           ["Average Health", overview.averageHealth ?? "-"],
@@ -256,8 +349,7 @@ export function WebsiteHealthTable() {
                 <TableColumn id="lighthouse">Lighthouse</TableColumn>
                 <TableColumn id="seo">Technical SEO</TableColumn>
                 <TableColumn id="design">Design QA</TableColumn>
-                <TableColumn id="checklists">Checklists</TableColumn>
-                <TableColumn id="security">Security</TableColumn>
+                <TableColumn id="checklists">Website checklists</TableColumn>
                 <TableColumn id="last">Last Scan</TableColumn>
                 <TableColumn id="action">Action</TableColumn>
               </TableHeader>
@@ -281,13 +373,6 @@ export function WebsiteHealthTable() {
                       <TableCell><Metric value={summary?.technicalSeoIssues} className={issueTone(summary?.technicalSeoIssues)} /></TableCell>
                       <TableCell><Metric value={summary?.designIssues} className={issueTone(summary?.designIssues)} /></TableCell>
                       <TableCell><Metric value={summary?.checklistIssues} className={issueTone(summary?.checklistIssues)} /></TableCell>
-                      <TableCell>
-                        {summary ? (
-                          <Chip size="sm" variant="soft" color={summary.security === "pass" ? "success" : summary.security === "warn" ? "warning" : "danger"}>
-                            {summary.security === "pass" ? "Pass" : summary.security === "warn" ? "Warning" : "Critical"}
-                          </Chip>
-                        ) : <span className="text-sm text-slate-400">-</span>}
-                      </TableCell>
                       <TableCell><span className="whitespace-nowrap text-sm text-slate-600">{formatDateTime(scan?.completedAt || scan?.createdAt)}</span></TableCell>
                       <TableCell>
                         <Dropdown>

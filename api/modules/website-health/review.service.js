@@ -5,6 +5,10 @@ var db = require('../../db/pool');
 var env = require('../../config/env');
 var claude = require('../ai/claude.service');
 var checklists = require('./checklist.service');
+var technicalSeo = require('./technical-seo.service');
+var designQa = require('./design-qa.service');
+
+var PLACEHOLDER_REGEX = /lorem ipsum|dolor sit amet|dummy (?:text|content)|\bTODO\b|your (?:company|clinic|business|name|text|tagline|content) here|sample (?:text|address|content)|insert (?:text|tagline|content|your) |text goes here|placeholder text|coming soon/i;
 
 var findingSchema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../checklists/finding.schema.json'), 'utf8'));
 
@@ -27,21 +31,7 @@ function deterministic(page) {
   var core = page.core || {};
   var headers = page.headers || {};
   if (page.error) output.push(finding('security', 'page.load', 'critical', 'Page could not be loaded', page.error, page.requestedUrl, 'Check DNS, TLS, redirects, and server availability.'));
-  if (page.httpStatus && page.httpStatus >= 400) output.push(finding('technical_seo', 'seo.http-status', 'critical', 'Page returns an error status', 'The final response was HTTP ' + page.httpStatus + '.', page.url, 'Restore the page or remove it from navigation and sitemap.'));
-  if (!core.title) output.push(finding('technical_seo', 'seo.title', 'critical', 'Missing title tag', 'No document title was captured.', '<title>', 'Add one unique descriptive title.'));
-  else if (core.title.length < 30 || core.title.length > 60) output.push(finding('technical_seo', 'seo.title', 'warning', 'Title length needs review', 'The title is ' + core.title.length + ' characters.', core.title, 'Keep the title concise and descriptive, normally 30-60 characters.'));
-  if (!core.description) output.push(finding('technical_seo', 'seo.meta-description', 'warning', 'Missing meta description', 'No meta description was captured.', 'meta[name="description"]', 'Add a unique relevant description.'));
-  if (!core.h1 || core.h1.length !== 1) output.push(finding('technical_seo', 'seo.h1', core.h1 && core.h1.length > 1 ? 'warning' : 'critical', 'Invalid H1 count', 'Expected exactly one H1 and found ' + ((core.h1 && core.h1.length) || 0) + '.', JSON.stringify(core.h1 || []), 'Use one descriptive H1.'));
-  if (!core.canonical) output.push(finding('technical_seo', 'seo.canonical', 'warning', 'Missing canonical URL', 'No canonical link was captured.', 'link[rel="canonical"]', 'Add one absolute canonical URL.'));
-  if (!core.language) output.push(finding('technical_seo', 'seo.language', 'warning', 'Missing page language', 'The html element has no lang attribute.', '<html>', 'Set the correct language code.'));
-  var brokenImages = (core.images || []).filter(function(image) { return image.complete && !image.width; });
-  if (brokenImages.length) output.push(finding('design', 'design.broken-media', 'critical', 'Broken images detected', brokenImages.length + ' image resources did not render.', brokenImages.slice(0, 10).map(function(image) { return image.src; }).join('\n'), 'Correct or replace the image URLs.'));
-  Object.keys(page.layouts || {}).forEach(function(viewport) {
-    var layout = page.layouts[viewport];
-    if (layout.horizontalOverflow) output.push(finding('design', 'design.horizontal-overflow', 'critical', 'Horizontal overflow detected', 'The document is wider than the viewport.', layout.documentWidth + 'px document in ' + layout.viewport.width + 'px viewport', 'Identify and constrain the overflowing element.', viewport));
-    if ((layout.clippedElements || []).length) output.push(finding('design', 'design.clipping', 'warning', 'Potential clipped content', layout.clippedElements.length + ' visible elements have overflowing content.', JSON.stringify(layout.clippedElements.slice(0, 8)), 'Review fixed dimensions, overflow rules, and responsive text sizing.', viewport));
-  });
-  if ((page.consoleErrors || []).length) output.push(finding('design', 'design.console-errors', 'warning', 'Browser console errors detected', page.consoleErrors.length + ' console errors occurred.', page.consoleErrors.slice(0, 8).join('\n'), 'Resolve the underlying JavaScript or resource errors.'));
+  // Design/layout findings now live in design-qa.service.js (Design QA step).
   if (String(page.url || '').startsWith('https://')) {
     if (!headers['strict-transport-security']) output.push(finding('security', 'security.hsts', 'warning', 'HSTS header is missing', 'The HTTPS response did not include Strict-Transport-Security.', page.url, 'Enable HSTS after confirming that all site resources support HTTPS.'));
     var mixed = (core.images || []).map(function(item) { return item.src; })
@@ -53,8 +43,6 @@ function deterministic(page) {
   if (!headers['x-content-type-options']) output.push(finding('security', 'security.content-type-options', 'warning', 'MIME sniffing protection is missing', 'No X-Content-Type-Options response header was captured.', page.url, 'Set X-Content-Type-Options to nosniff.'));
   if (!headers['referrer-policy']) output.push(finding('security', 'security.referrer-policy', 'warning', 'Referrer Policy is missing', 'No Referrer-Policy response header was captured.', page.url, 'Set a privacy-appropriate Referrer-Policy.'));
   if (!headers['content-security-policy'] && !headers['x-frame-options']) output.push(finding('security', 'security.frame-protection', 'warning', 'Frame protection is missing', 'Neither CSP frame-ancestors nor X-Frame-Options was captured.', page.url, 'Add frame-ancestors in CSP or an appropriate X-Frame-Options header.'));
-  var placeholder = String(core.bodyText || '').match(/lorem ipsum|dummy (?:text|content)|\bTODO\b|your (?:company|clinic|name) here|sample (?:text|address)/i);
-  if (placeholder) output.push(finding('content', 'content.placeholder', 'critical', 'Placeholder content detected', 'The page contains template or unfinished content.', placeholder[0], 'Replace it with approved final content.'));
   (core.forms || []).forEach(function(form) {
     var unnamed = form.fields.filter(function(field) { return !field.label; });
     if (unnamed.length) output.push(finding('forms', 'forms.accessible-labels', 'warning', 'Form fields are missing labels', unnamed.length + ' fields have no captured accessible label.', JSON.stringify(unnamed), 'Add visible labels or accurate accessible names.'));
@@ -143,64 +131,78 @@ function filterDeterministic(findings, checks) {
   return findings.filter(function(item) {
     if (item.checkId === 'page.load') return true;
     if (item.category === 'technical_seo') return checks.indexOf('technical_seo') !== -1;
-    if (item.category === 'security') return checks.indexOf('security') !== -1;
-    if (item.category === 'design' || item.category === 'content' || item.category === 'forms') {
+    // Transport/header security comes from the crawl and does NOT need the
+    // connector, so it runs with any crawl-based analysis check — not just the
+    // connector-gated "Website checklists". ('security' kept for legacy scans.)
+    if (item.category === 'security') {
+      return checks.indexOf('website_checklists') !== -1
+        || checks.indexOf('technical_seo') !== -1
+        || checks.indexOf('design_qa') !== -1
+        || checks.indexOf('security') !== -1;
+    }
+    if (item.category === 'forms') return checks.indexOf('forms') !== -1;
+    if (item.category === 'design' || item.category === 'content') {
       return checks.indexOf('design_qa') !== -1;
     }
     return false;
   });
 }
 
-async function review(page, identity, checks) {
-  var selected = Array.isArray(checks) ? checks : ['technical_seo', 'design_qa', 'security'];
-  var fixed = filterDeterministic(deterministic(page), selected);
-  var wantSeo = selected.indexOf('technical_seo') !== -1;
-  var wantDesign = selected.indexOf('design_qa') !== -1;
-  var results = await Promise.all([
-    wantSeo ? aiReview('website_technical_seo', 'technicalSeo', 'technical_seo', page, identity, false) : Promise.resolve({ findings: [], status: 'skipped' }),
-    wantDesign ? aiReview('website_design_content_qa', 'designContent', 'design', page, identity, true) : Promise.resolve({ findings: [], status: 'skipped' }),
-  ]);
-  return {
-    deterministicFindings: fixed,
-    technicalSeo: results[0],
-    designContent: results[1],
-    findings: fixed.concat(results[0].findings, results[1].findings),
-  };
+function placeholderRegexFindings(page) {
+  var match = String((page.core || {}).bodyText || '').match(PLACEHOLDER_REGEX);
+  if (!match) return [];
+  return [finding('technical_seo', 'seo.placeholder-content', 'critical', 'Placeholder content detected', 'The page contains template or unfinished copy.', match[0], 'Replace it with approved final content.')];
 }
 
-function lighthouseMetrics(lighthouseResult) {
-  var result = lighthouseResult || {};
-  function side(strategy) {
-    var data = result[strategy];
-    if (!data) return null;
-    return { scores: data.scores || null, metrics: data.metrics || null, warnings: (data.warnings || []).slice(0, 10) };
+/** Claude reads the page's visible text for placeholder / dummy / unfinished
+ *  content. Falls back to a regex when the AI key/prompt is unavailable, so
+ *  Technical SEO still runs without AI. */
+async function reviewPlaceholderText(page) {
+  if (!env.ai.anthropicApiKey) return { findings: placeholderRegexFindings(page), status: 'fallback' };
+  var setting = await prompt('website_placeholder_content');
+  if (!setting || !setting.system_prompt || !setting.user_prompt_template) {
+    return { findings: placeholderRegexFindings(page), status: 'fallback' };
   }
-  return JSON.stringify({ status: result.status || 'unknown', mobile: side('mobile'), desktop: side('desktop'), errors: result.errors || [] }, null, 2);
-}
-
-/** Claude interprets the real Lighthouse metrics into prioritised findings. */
-async function reviewLighthouse(page, lighthouseResult) {
-  if (!env.ai.anthropicApiKey) return { findings: [], status: 'not_configured' };
-  if (!lighthouseResult || lighthouseResult.status === 'not_run') return { findings: [], status: 'skipped' };
-  var setting = await prompt('website_lighthouse_review');
-  if (!setting || !setting.system_prompt || !setting.user_prompt_template) return { findings: [], status: 'not_configured' };
   try {
     var result = await claude.generateStructured({
       system: setting.system_prompt,
-      prompt: render(setting.user_prompt_template, {
-        metrics: lighthouseMetrics(lighthouseResult),
-        evidence: compactEvidence(page),
-      }),
+      prompt: render(setting.user_prompt_template, { evidence: compactEvidence(page) }),
       schema: findingSchema,
       images: [],
       model: setting.model || env.ai.anthropicModel,
       temperature: Number(setting.temperature),
       maxTokens: Number(setting.max_tokens),
     });
-    return { findings: normalizeAiFindings('lighthouse', result), status: 'completed' };
+    return { findings: normalizeAiFindings('technical_seo', result), status: 'completed' };
   } catch (err) {
-    return { findings: [], status: 'failed', error: err.message };
+    return { findings: placeholderRegexFindings(page), status: 'fallback', error: err.message };
   }
 }
 
-module.exports = { review: review, reviewLighthouse: reviewLighthouse, deterministic: deterministic };
+async function review(page, identity, checks) {
+  var selected = Array.isArray(checks) ? checks : ['technical_seo', 'design_qa', 'website_checklists', 'forms'];
+  var fixed = filterDeterministic(deterministic(page), selected);
+  var wantSeo = selected.indexOf('technical_seo') !== -1;
+  var wantDesign = selected.indexOf('design_qa') !== -1;
+
+  // Technical SEO = deterministic on-page/image checks + a Claude (or regex)
+  // placeholder-text check. Independent of Lighthouse.
+  var seoFindings = wantSeo ? technicalSeo.technicalSeoFindings(page) : [];
+  var placeholder = wantSeo ? await reviewPlaceholderText(page) : { findings: [], status: 'skipped' };
+
+  // Design QA = deterministic layout/responsiveness/consistency + a Claude
+  // visual pass on the screenshots. Visual only (no content findings).
+  var designDeterministic = wantDesign ? designQa.designFindings(page) : [];
+  var designContent = wantDesign
+    ? await aiReview('website_design_content_qa', 'designContent', 'design', page, identity, true)
+    : { findings: [], status: 'skipped' };
+
+  return {
+    deterministicFindings: fixed,
+    technicalSeo: { status: wantSeo ? 'completed' : 'skipped', placeholderStatus: placeholder.status },
+    designContent: designContent,
+    findings: fixed.concat(seoFindings, placeholder.findings, designDeterministic, designContent.findings),
+  };
+}
+
+module.exports = { review: review, deterministic: deterministic };

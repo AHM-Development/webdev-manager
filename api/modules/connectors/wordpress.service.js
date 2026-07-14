@@ -75,7 +75,7 @@ async function createPairingCode(websiteId, user, context) {
     { id: id, websiteId: websiteId, codeHash: security.sha256(code), userId: user.id, expiresAt: security.mysqlDate(expiresAt) }
   );
   await activity.logActivity({ userId: user.id, eventType: 'wordpress.pairing_code_created', ip: context.ip, userAgent: context.userAgent, metadata: { websiteId: String(websiteId) } });
-  return { code: code, expiresAt: expiresAt.toISOString(), website: { id: String(site.id), name: site.name, url: site.url } };
+  return { code: code, expiresAt: expiresAt.toISOString(), apiUrl: env.websiteHealth.publicApiUrl, website: { id: String(site.id), name: site.name, url: site.url } };
 }
 
 async function pair(input, context) {
@@ -186,6 +186,30 @@ async function signedGet(connection, siteUrl, routePath) {
   return response.json();
 }
 
+async function signedPost(connection, siteUrl, routePath, payload) {
+  var secret = encryption.decrypt(connection.secret_encrypted);
+  var endpoint = new URL(routePath, siteUrl);
+  await urlSecurity.assertSafeUrl(endpoint.toString());
+  var body = JSON.stringify(payload || {});
+  var timestamp = String(Math.floor(Date.now() / 1000));
+  var nonce = security.randomToken(18);
+  var bodyHash = crypto.createHash('sha256').update(body).digest('hex');
+  var response = await urlSecurity.safeFetch(endpoint.toString(), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-ahm-connection': connection.connection_id,
+      'x-ahm-timestamp': timestamp,
+      'x-ahm-nonce': nonce,
+      'x-ahm-signature': signature(secret, timestamp, nonce, 'POST', endpoint.pathname, bodyHash),
+    },
+    body: body,
+    signal: AbortSignal.timeout(env.websiteHealth.pageTimeoutMs),
+  });
+  if (!response.ok) throw new Error('AHM Core returned HTTP ' + response.status + '.');
+  return response.json();
+}
+
 async function refreshSnapshot(websiteId) {
   var site = await website(websiteId);
   var rows = await db.query("SELECT * FROM wordpress_connections WHERE website_id = :websiteId AND status <> 'revoked' LIMIT 1", { websiteId: websiteId });
@@ -200,6 +224,25 @@ async function refreshSnapshot(websiteId) {
   }
 }
 
+async function fetchForms(websiteId) {
+  var site = await website(websiteId);
+  var rows = await db.query("SELECT * FROM wordpress_connections WHERE website_id = :websiteId AND status <> 'revoked' LIMIT 1", { websiteId: websiteId });
+  if (!rows[0]) return null;
+  try {
+    return await signedGet(rows[0], site.url, '/wp-json/ahm-core/v1/forms');
+  } catch (err) {
+    await db.query("UPDATE wordpress_connections SET status = 'warning', last_error = :error WHERE website_id = :websiteId", { websiteId: websiteId, error: err.message });
+    return null;
+  }
+}
+
+async function sendFormTest(websiteId, formId, to) {
+  var site = await website(websiteId);
+  var rows = await db.query("SELECT * FROM wordpress_connections WHERE website_id = :websiteId AND status <> 'revoked' LIMIT 1", { websiteId: websiteId });
+  if (!rows[0]) fail(400, 'CONNECTOR_NOT_PAIRED', 'This website is not paired with a WordPress connector.');
+  return signedPost(rows[0], site.url, '/wp-json/ahm-core/v1/forms/test', { formId: String(formId || ''), to: String(to || '') });
+}
+
 async function revoke(websiteId, user, context) {
   await website(websiteId);
   await db.query("UPDATE wordpress_connections SET status = 'revoked' WHERE website_id = :websiteId", { websiteId: websiteId });
@@ -212,5 +255,7 @@ module.exports = {
   pair: pair,
   heartbeat: heartbeat,
   refreshSnapshot: refreshSnapshot,
+  fetchForms: fetchForms,
+  sendFormTest: sendFormTest,
   revoke: revoke,
 };

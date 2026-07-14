@@ -20,6 +20,16 @@ class AHM_Core_REST {
             'callback' => array($this, 'snapshot'),
             'permission_callback' => array($this, 'authorize'),
         ));
+        register_rest_route('ahm-core/v1', '/forms', array(
+            'methods' => 'GET',
+            'callback' => array($this, 'forms'),
+            'permission_callback' => array($this, 'authorize'),
+        ));
+        register_rest_route('ahm-core/v1', '/forms/test', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'forms_test'),
+            'permission_callback' => array($this, 'authorize'),
+        ));
     }
 
     public function authorize(WP_REST_Request $request) {
@@ -60,5 +70,16 @@ class AHM_Core_REST {
 
     public function snapshot() {
         return rest_ensure_response(AHM_Core::snapshot());
+    }
+
+    public function forms() {
+        return rest_ensure_response(AHM_Core::forms());
+    }
+
+    public function forms_test(WP_REST_Request $request) {
+        $params = $request->get_json_params();
+        $form_id = isset($params['formId']) ? $params['formId'] : '';
+        $to = isset($params['to']) ? $params['to'] : '';
+        return rest_ensure_response(AHM_Core::send_form_test($form_id, $to));
     }
 }

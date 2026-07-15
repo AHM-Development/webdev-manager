@@ -80,13 +80,19 @@ function emptyInvitedUser(): AppUser {
 
 const roleToApi: Record<AppUserRole, ApiUser["role"]> = {
   "Super Admin": "superadmin",
+  "Web Dev Manager": "web_dev_manager",
   Developer: "developer",
+  Designer: "designer",
+  "Client Success Manager": "client_success_manager",
   Spectator: "spectator",
 };
 
 const roleFromApi: Record<ApiUser["role"], AppUserRole> = {
   superadmin: "Super Admin",
+  web_dev_manager: "Web Dev Manager",
   developer: "Developer",
+  designer: "Designer",
+  client_success_manager: "Client Success Manager",
   spectator: "Spectator",
 };
 

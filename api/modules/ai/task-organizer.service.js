@@ -4,7 +4,7 @@ var activity = require('../auth/activity.service');
 var claude = require('./claude.service');
 
 var VALID_PRIORITIES = ['Low', 'Medium', 'High'];
-var VALID_STATUSES = ['Backlog', 'To Do', 'In Progress', 'Review', 'Blocked', 'Done'];
+var VALID_STATUSES = ['Backlog', 'In Progress', 'Review', 'Blocked', 'Done'];
 var TASK_DRAFT_SCHEMA = {
   type: 'object',
   additionalProperties: false,

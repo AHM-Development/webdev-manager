@@ -489,13 +489,13 @@ async function updateApplication(issueId, applicationId, input, user, context) {
   var app = await applicationBelongsToIssue(issueId, applicationId);
   var fixed = !!input.fixed;
 
-  // "Mark fixed" drives the linked board task to Done (or back to To Do).
+  // "Mark fixed" drives the linked board task to Done (or back to Backlog).
   if (app.task_id) {
     await db.query(
       `UPDATE tasks
        SET status = :status, updated_by = :userId
        WHERE id = :taskId AND deleted_at IS NULL`,
-      { status: fixed ? 'Done' : 'To Do', userId: user.id, taskId: app.task_id }
+      { status: fixed ? 'Done' : 'Backlog', userId: user.id, taskId: app.task_id }
     );
   }
 

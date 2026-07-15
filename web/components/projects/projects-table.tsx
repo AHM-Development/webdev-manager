@@ -5,6 +5,12 @@ import {
   AvatarFallback,
   Button,
   Chip,
+  ListBox,
+  ListBoxItem,
+  Select,
+  SelectPopover,
+  SelectTrigger,
+  SelectValue,
   Table,
   TableBody,
   TableCell,
@@ -16,6 +22,7 @@ import {
   useOverlayState,
 } from "@heroui/react";
 import {
+  ChevronDown,
   Download,
   ExternalLink,
   Upload,
@@ -38,6 +45,7 @@ import {
   listProjects,
   updateProject,
   updateProjectPriority,
+  updateProjectStatus,
   type ProjectPayload,
 } from "@/libs/api/projects";
 import { notify } from "@/libs/notify";
@@ -112,18 +120,71 @@ function LinkCell({ href, label }: { href?: string; label: string }) {
   );
 }
 
+const GROUP_OPTIONS = ["High", "Medium", "Low", "Churned"] as const;
+type ProjectGroup = (typeof GROUP_OPTIONS)[number];
+
+/** Pill-style colours for each priority/churned group. */
+const groupChip: Record<ProjectGroup, string> = {
+  High: "bg-red-100 text-red-700",
+  Medium: "bg-amber-100 text-amber-700",
+  Low: "bg-emerald-100 text-emerald-700",
+  Churned: "bg-gray-200 text-gray-600",
+};
+
+/** A project's current group is its priority, or "Churned" once it's churned. */
+function projectGroupOf(project: Project): ProjectGroup {
+  return project.status === "Churned" ? "Churned" : project.priority;
+}
+
+/** Clickable group pill with a dropdown to move a project between High/Medium/Low/Churned. */
+function ProjectGroupSelect({
+  project,
+  onChange,
+}: {
+  project: Project;
+  onChange: (project: Project, group: ProjectGroup) => void;
+}) {
+  const current = projectGroupOf(project);
+  return (
+    <Select
+      aria-label={`Change group for ${project.clientName}`}
+      selectedKey={current}
+      onSelectionChange={(key) => onChange(project, key as ProjectGroup)}
+    >
+      <SelectTrigger
+        className={`inline-flex min-h-auto items-center gap-1 rounded-full border-0 px-2.5 py-1 text-xs font-semibold shadow-none ${groupChip[current]}`}
+      >
+        <SelectValue>{current}</SelectValue>
+        <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+      </SelectTrigger>
+      <SelectPopover>
+        <ListBox>
+          {GROUP_OPTIONS.map((group) => (
+            <ListBoxItem key={group} id={group}>
+              {group}
+            </ListBoxItem>
+          ))}
+        </ListBox>
+      </SelectPopover>
+    </Select>
+  );
+}
+
 function PriorityProjectTable({
-  priority,
+  label,
   projects,
   onDrop,
   onEdit,
   onDelete,
+  onChangeGroup,
 }: {
-  priority: ProjectPriority;
+  label: string;
   projects: Project[];
-  onDrop: (ids: string[]) => void;
+  /** When omitted, the table is display-only (no drag-to-reprioritise). */
+  onDrop?: (ids: string[]) => void;
   onEdit: (project: Project) => void;
   onDelete: (project: Project) => void;
+  onChangeGroup: (project: Project, group: ProjectGroup) => void;
 }) {
   const { dragAndDropHooks } = useDragAndDrop({
     getItems: (keys) =>
@@ -145,7 +206,7 @@ function PriorityProjectTable({
               (JSON.parse(await item.getText(DRAG_TYPE)) as { id: string }).id
           )
       );
-      onDrop(ids);
+      onDrop?.(ids);
     },
     onRootDrop: async (event) => {
       const ids = await Promise.all(
@@ -156,22 +217,24 @@ function PriorityProjectTable({
               (JSON.parse(await item.getText(DRAG_TYPE)) as { id: string }).id
           )
       );
-      onDrop(ids);
+      onDrop?.(ids);
     },
     onReorder: (event) => {
-      onDrop([...event.keys].map(String));
+      onDrop?.([...event.keys].map(String));
     },
   });
 
   return (
-    <Table aria-label={`${priority} priority projects`}>
+    <Table aria-label={`${label} projects`}>
       <TableScrollContainer>
         <TableContent
           className="w-full min-w-[1120px] table-fixed"
           dragAndDropHooks={
-            dragAndDropHooks as unknown as ComponentProps<
-              typeof TableContent
-            >["dragAndDropHooks"]
+            onDrop
+              ? (dragAndDropHooks as unknown as ComponentProps<
+                  typeof TableContent
+                >["dragAndDropHooks"])
+              : undefined
           }
         >
           <TableHeader>
@@ -181,13 +244,16 @@ function PriorityProjectTable({
             <TableColumn id="type" className="w-[10%]">
               Type
             </TableColumn>
+            <TableColumn id="priority" className="w-[10%]">
+              Priority
+            </TableColumn>
             <TableColumn id="assignee" className="w-[14%]">
               Assignee
             </TableColumn>
             <TableColumn id="status" className="w-[12%]">
               Status
             </TableColumn>
-            <TableColumn id="websites" className="w-[18%]">
+            <TableColumn id="websites" className="w-[14%]">
               Websites / Domains
             </TableColumn>
             <TableColumn id="figma" className="w-[10%]">
@@ -231,6 +297,9 @@ function PriorityProjectTable({
                   >
                     {project.type}
                   </Chip>
+                </TableCell>
+                <TableCell>
+                  <ProjectGroupSelect project={project} onChange={onChangeGroup} />
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
@@ -333,6 +402,7 @@ export function ProjectsTable() {
   const [assignee, setAssignee] = useState(ALL);
   const [type, setType] = useState(ALL);
   const [status, setStatus] = useState(ALL);
+  const [tab, setTab] = useState<"all" | ProjectPriority | "Churned">("all");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -396,14 +466,52 @@ export function ProjectsTable() {
     [list, assignee, type, status]
   );
 
-  const grouped = useMemo(
+  // Churned projects are excluded from the priority groups and shown separately.
+  const priorityGroups = useMemo(
     () =>
       PRIORITY_OPTIONS.map((priority) => ({
         priority,
-        rows: filtered.filter((project) => project.priority === priority),
+        rows: filtered.filter(
+          (project) => project.priority === priority && project.status !== "Churned"
+        ),
       })),
     [filtered]
   );
+  const churnedRows = useMemo(
+    () => filtered.filter((project) => project.status === "Churned"),
+    [filtered]
+  );
+
+  type RenderGroup =
+    | { kind: "priority"; priority: ProjectPriority; rows: Project[] }
+    | { kind: "churned"; rows: Project[] };
+
+  // Which group(s) to render for the active tab. "All" stacks every group (and
+  // supports drag between them); a specific tab shows just that one.
+  const visibleGroups = useMemo<RenderGroup[]>(() => {
+    if (tab === "all") {
+      const groups: RenderGroup[] = priorityGroups.map((group) => ({
+        kind: "priority",
+        priority: group.priority,
+        rows: group.rows,
+      }));
+      // Always show the Churned section here so it stays a drop target for
+      // drag-to-churn, even before any project has been churned.
+      groups.push({ kind: "churned", rows: churnedRows });
+      return groups;
+    }
+    if (tab === "Churned") return [{ kind: "churned", rows: churnedRows }];
+    const group = priorityGroups.find((item) => item.priority === tab);
+    return [{ kind: "priority", priority: tab, rows: group?.rows ?? [] }];
+  }, [tab, priorityGroups, churnedRows]);
+
+  const TABS: { id: "all" | ProjectPriority | "Churned"; label: string; count: number }[] = [
+    { id: "all", label: "All", count: filtered.length },
+    { id: "High", label: "High", count: priorityGroups[0].rows.length },
+    { id: "Medium", label: "Medium", count: priorityGroups[1].rows.length },
+    { id: "Low", label: "Low", count: priorityGroups[2].rows.length },
+    { id: "Churned", label: "Churned", count: churnedRows.length },
+  ];
 
   const handleEdit = (p: Project) => {
     setSelected(p);
@@ -421,12 +529,30 @@ export function ProjectsTable() {
   const handlePriorityChange = async (ids: string[], priority: ProjectPriority) => {
     setError(null);
     const previous = list;
+    // Dragging a churned project into a priority group also restores it (active again).
+    const restoreIds = new Set(
+      previous
+        .filter((project) => ids.includes(project.id) && project.status === "Churned")
+        .map((project) => project.id)
+    );
     setList((prev) =>
-      prev.map((project) => (ids.includes(project.id) ? { ...project, priority } : project))
+      prev.map((project) =>
+        ids.includes(project.id)
+          ? {
+              ...project,
+              priority,
+              status: restoreIds.has(project.id) ? "In Progress" : project.status,
+            }
+          : project
+      )
     );
     try {
       const updated = await Promise.all(
-        ids.map((id) => updateProjectPriority(id, priority))
+        ids.map(async (id) => {
+          let project = await updateProjectPriority(id, priority);
+          if (restoreIds.has(id)) project = await updateProjectStatus(id, "In Progress");
+          return project;
+        })
       );
       setList((prev) =>
         prev.map((project) => updated.find((item) => item.id === project.id) ?? project)
@@ -440,6 +566,41 @@ export function ProjectsTable() {
       setError(message);
       notify.error("Could not update priority", { description: message });
     }
+  };
+
+  const handleSetChurned = async (ids: string[], churned: boolean) => {
+    setError(null);
+    const previous = list;
+    const nextStatus: Project["status"] = churned ? "Churned" : "In Progress";
+    setList((prev) =>
+      prev.map((project) =>
+        ids.includes(project.id) ? { ...project, status: nextStatus } : project
+      )
+    );
+    try {
+      const updated = await Promise.all(
+        ids.map((id) => updateProjectStatus(id, nextStatus))
+      );
+      setList((prev) =>
+        prev.map((project) => updated.find((item) => item.id === project.id) ?? project)
+      );
+      setSelected((current) =>
+        current ? updated.find((item) => item.id === current.id) ?? current : current
+      );
+    } catch (err) {
+      setList(previous);
+      const message = (err as Error).message ?? "Could not update status.";
+      setError(message);
+      notify.error("Could not update status", { description: message });
+    }
+  };
+
+  // Move a project between groups via the pill dropdown: a priority group sets
+  // priority (and un-churns if needed); "Churned" sets the project churned.
+  const handleChangeGroup = (project: Project, group: ProjectGroup) => {
+    if (group === projectGroupOf(project)) return;
+    if (group === "Churned") void handleSetChurned([project.id], true);
+    else void handlePriorityChange([project.id], group);
   };
 
   const handleDelete = async (id: string) => {
@@ -538,34 +699,69 @@ export function ProjectsTable() {
         </p>
       )}
 
+      {/* Priority tabs */}
+      <div className="app-tabbar flex w-fit flex-wrap gap-1">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`app-tab px-4 py-2 text-sm font-semibold ${
+              tab === t.id ? "app-tab-active" : "hover:bg-[#f4f7f6] hover:text-slate-950"
+            }`}
+          >
+            {t.label}
+            <span className="ml-1.5 text-xs text-gray-400">{t.count}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="space-y-5">
-        {grouped.map((group) => {
+        {visibleGroups.map((group) => {
+          if (group.kind === "churned") {
+            return (
+              <section key="Churned" className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Chip size="sm" color="danger" variant="soft">Churned</Chip>
+                  <h2 className="text-base font-semibold text-gray-900">Churned</h2>
+                  <span className="text-sm text-gray-500">
+                    {group.rows.length} project{group.rows.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div className="app-table-shell overflow-x-auto">
+                  <PriorityProjectTable
+                    label="Churned"
+                    projects={group.rows}
+                    onDrop={(ids) => handleSetChurned(ids, true)}
+                    onEdit={handleEdit}
+                    onDelete={requestDelete}
+                    onChangeGroup={handleChangeGroup}
+                  />
+                </div>
+              </section>
+            );
+          }
           return (
             <section key={group.priority} className="space-y-3">
               <div className="flex items-center gap-2">
-                <Chip
-                  size="sm"
-                  color={priorityColor[group.priority]}
-                  variant="soft"
-                >
+                <Chip size="sm" color={priorityColor[group.priority]} variant="soft">
                   {group.priority}
                 </Chip>
                 <h2 className="text-base font-semibold text-gray-900">
                   {group.priority} Priority
                 </h2>
                 <span className="text-sm text-gray-500">
-                  {group.rows.length} project
-                  {group.rows.length === 1 ? "" : "s"}
+                  {group.rows.length} project{group.rows.length === 1 ? "" : "s"}
                 </span>
               </div>
-
               <div className="app-table-shell overflow-x-auto">
                 <PriorityProjectTable
-                  priority={group.priority}
+                  label={group.priority}
                   projects={group.rows}
                   onDrop={(ids) => handlePriorityChange(ids, group.priority)}
                   onEdit={handleEdit}
                   onDelete={requestDelete}
+                  onChangeGroup={handleChangeGroup}
                 />
               </div>
             </section>

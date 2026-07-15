@@ -9,7 +9,13 @@ var authService = require('../auth/auth.service');
 var roleConfig = require('../../config/roles');
 
 var ROLES = roleConfig.ALL_ROLES;
-var INVITABLE_ROLES = [roleConfig.ROLES.DEVELOPER, roleConfig.ROLES.SPECTATOR];
+var INVITABLE_ROLES = [
+  roleConfig.ROLES.WEB_DEV_MANAGER,
+  roleConfig.ROLES.DEVELOPER,
+  roleConfig.ROLES.DESIGNER,
+  roleConfig.ROLES.CLIENT_SUCCESS_MANAGER,
+  roleConfig.ROLES.SPECTATOR,
+];
 var STATUSES = ['active', 'invited', 'disabled'];
 var GENDERS = ['male', 'female'];
 

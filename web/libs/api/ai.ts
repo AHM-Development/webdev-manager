@@ -7,7 +7,7 @@ export type OrganizedTaskDraft = {
   checklist: Array<{ title: string; completed: boolean }>;
   attachments: Array<{ name: string; type: "file" | "link"; url?: string | null }>;
   priority: "Low" | "Medium" | "High";
-  status: "Backlog" | "To Do" | "In Progress" | "Review" | "Blocked" | "Done";
+  status: "Backlog" | "In Progress" | "Review" | "Blocked" | "Done";
   confidence?: "low" | "medium" | "high";
   needsReview?: boolean;
 };

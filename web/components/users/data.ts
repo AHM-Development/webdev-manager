@@ -1,4 +1,10 @@
-export type AppUserRole = "Super Admin" | "Developer" | "Spectator";
+export type AppUserRole =
+  | "Super Admin"
+  | "Web Dev Manager"
+  | "Developer"
+  | "Designer"
+  | "Client Success Manager"
+  | "Spectator";
 export type AppUserStatus = "Active" | "Invited" | "Disabled";
 
 export type AppUser = {
@@ -13,15 +19,31 @@ export type AppUser = {
   lastActiveAt: string | null;
 };
 
-export const USER_ROLES: AppUserRole[] = ["Super Admin", "Developer", "Spectator"];
-export const INVITABLE_USER_ROLES: AppUserRole[] = ["Developer", "Spectator"];
+export const USER_ROLES: AppUserRole[] = [
+  "Super Admin",
+  "Web Dev Manager",
+  "Developer",
+  "Designer",
+  "Client Success Manager",
+  "Spectator",
+];
+export const INVITABLE_USER_ROLES: AppUserRole[] = [
+  "Web Dev Manager",
+  "Developer",
+  "Designer",
+  "Client Success Manager",
+  "Spectator",
+];
 
 export const roleColor: Record<
   AppUserRole,
   "danger" | "accent" | "default"
 > = {
   "Super Admin": "danger",
+  "Web Dev Manager": "danger",
   Developer: "accent",
+  Designer: "accent",
+  "Client Success Manager": "accent",
   Spectator: "default",
 };
 

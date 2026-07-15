@@ -322,12 +322,14 @@ export function CreateTaskModal({
   projectOptions,
   assigneeOptions,
   defaultAssignee = UNASSIGNED,
+  defaultProjectId = "",
   onCreate,
 }: {
   state: ReturnType<typeof useOverlayState>;
   projectOptions: TaskProjectOption[];
   assigneeOptions: TaskAssigneeOption[];
   defaultAssignee?: string;
+  defaultProjectId?: string;
   onCreate: (input: NewTaskInput) => Promise<void> | void;
 }) {
   const assigneeSelect = useMemo(
@@ -346,7 +348,7 @@ export function CreateTaskModal({
   const form = useForm<AddTaskValues>({
     resolver: zodResolver(addTaskSchema),
     defaultValues: {
-      projectId: "",
+      projectId: defaultProjectId,
       assignee: defaultAssignee,
       assigneeUserId: "",
       startDate: "",

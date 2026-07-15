@@ -5,6 +5,7 @@ import {
   Bug,
   ClipboardList,
   FolderKanban,
+  Milestone,
   LayoutDashboard,
   ListChecks,
   Settings,
@@ -32,6 +33,7 @@ const navGroups: {
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { label: "Projects", href: "/dashboard/projects", icon: FolderKanban },
+      { label: "Client Logs", href: "/dashboard/client-logs", icon: Milestone },
       { label: "Website Health", href: "/dashboard/website-health", icon: Activity },
     ],
   },
@@ -120,19 +122,6 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
-
-      <div className="m-4 rounded-2xl border border-slate-200 bg-[#f7f8fa] p-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Plan
-        </p>
-        <p className="mt-2 text-sm font-semibold text-slate-950">
-          Operations Suite
-        </p>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-          <div className="h-full w-[72%] rounded-full bg-gradient-to-r from-[#24c7d5] to-[#0b7de3]" />
-        </div>
-        <p className="mt-2 text-xs text-slate-500">72% workspace configured</p>
-      </div>
     </aside>
   );
 }

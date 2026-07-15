@@ -16,6 +16,8 @@ var taskRoutes = require('../modules/tasks/tasks.routes');
 var noteRoutes = require('../modules/notes/notes.routes');
 var websiteHealthRoutes = require('../modules/website-health/website-health.routes');
 var wordpressConnectorRoutes = require('../modules/connectors/wordpress.routes');
+var clientLogRoutes = require('../modules/client-logs/client-logs.routes');
+var agentRoutes = require('../modules/agent/agent.routes');
 var auth = require('../middleware/auth');
 var limits = require('../middleware/rate-limit');
 var roles = require('../config/roles');
@@ -45,6 +47,9 @@ router.use('/tasks', limits.apiIpRateLimit, taskRoutes);
 router.use('/notes', limits.apiIpRateLimit, noteRoutes);
 router.use('/website-health', limits.apiIpRateLimit, websiteHealthRoutes);
 router.use('/connectors/wordpress', wordpressConnectorRoutes);
+router.use('/client-logs', limits.apiIpRateLimit, clientLogRoutes);
+// Viktor agent surface manages its own auth (delegation token / OAuth client).
+router.use('/agent', limits.apiIpRateLimit, agentRoutes);
 
 router.post(
   '/integrations/discord/test-user',

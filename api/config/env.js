@@ -94,6 +94,21 @@ module.exports = {
       process.env.JWT_SECRET ||
       'dev-only-change-me',
   },
+  // Viktor AI agent: an OAuth2 client that acts on behalf of a user via a
+  // delegation token. Reads run directly; writes go through propose → confirm.
+  agent: {
+    clientId: process.env.VIKTOR_CLIENT_ID || 'viktor',
+    clientSecret: process.env.VIKTOR_CLIENT_SECRET || '',
+    redirectUris: (process.env.VIKTOR_REDIRECT_URIS || '')
+      .split(',')
+      .map(function(value) { return value.trim(); })
+      .filter(Boolean),
+    accessTtlSeconds: parseDurationSeconds(process.env.AGENT_ACCESS_TTL, 15 * 60),
+    refreshTtlSeconds: parseDurationSeconds(process.env.AGENT_REFRESH_TTL, 30 * 24 * 60 * 60),
+    authCodeTtlSeconds: numberFromEnv('AGENT_AUTH_CODE_TTL_SECONDS', 300),
+    proposalTtlSeconds: numberFromEnv('AGENT_PROPOSAL_TTL_SECONDS', 15 * 60),
+    tokenAudience: process.env.AGENT_TOKEN_AUDIENCE || 'ahm-agent',
+  },
   rateLimit: {
     authWindowSeconds: numberFromEnv('AUTH_RATE_LIMIT_WINDOW_SECONDS', 15 * 60),
     authMaxRequests: numberFromEnv('AUTH_RATE_LIMIT_MAX_REQUESTS', 20),

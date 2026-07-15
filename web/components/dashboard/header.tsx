@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, LogOut, Plus } from "lucide-react";
+import { Bell, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthContext } from "@/libs/auth/auth-context";
@@ -49,8 +49,14 @@ export function Header() {
   const page = currentPage(pathname);
   const { user, logout } = useAuthContext();
 
+  // Prefer first/last name initials; fall back to the display name (e.g. "Joel
+  // Aposaga" → "JA") when those aren't set, then to a generic default.
+  const nameParts = (user?.name ?? "").trim().split(/\s+/).filter(Boolean);
   const initials =
     `${user?.firstName?.[0] ?? ""}${user?.lastName?.[0] ?? ""}`.toUpperCase() ||
+    `${nameParts[0]?.[0] ?? ""}${
+      nameParts.length > 1 ? nameParts[nameParts.length - 1][0] : ""
+    }`.toUpperCase() ||
     "AH";
   const role =
     user?.role === "superadmin"
@@ -82,13 +88,6 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
-        <Link
-          href="/dashboard/tasks"
-          className="hidden h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-[#24c7d5] via-[#0b7de3] to-[#082a78] px-4 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(11,125,227,0.22)] transition-colors hover:brightness-95 sm:inline-flex"
-        >
-          <Plus className="h-4 w-4" />
-          Add Task
-        </Link>
         <button
           type="button"
           aria-label="Notifications"
@@ -109,9 +108,18 @@ export function Header() {
           href="/dashboard/my-profile"
           className="flex h-10 items-center gap-3 rounded-xl bg-[#f6f7f9] px-2.5 hover:bg-slate-100"
         >
-          <div className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#24c7d5] to-[#0b7de3] text-xs font-semibold text-white">
-            {initials}
-          </div>
+          {user?.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={user.avatarUrl}
+              alt={user.name || "Avatar"}
+              className="h-7 w-7 rounded-lg object-cover"
+            />
+          ) : (
+            <div className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#24c7d5] to-[#0b7de3] text-xs font-semibold text-white">
+              {initials}
+            </div>
+          )}
           <div className="hidden leading-tight sm:block">
             <p className="text-xs font-semibold text-slate-950">
               {user?.name || "My Profile"}

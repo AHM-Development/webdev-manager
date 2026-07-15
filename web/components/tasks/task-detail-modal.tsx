@@ -76,16 +76,23 @@ function TaskDateRangeField({
   onChange: (value: RangeValue<DateValue> | null) => void;
   error?: string;
 }) {
+  // Minimum is today, but never later than a task's existing start date — otherwise
+  // editing an already-started task would flag the field invalid (red) with no message.
+  const todayValue = today(getLocalTimeZone());
+  const existingStart = toDateValue(startDate);
+  const minValue =
+    existingStart && existingStart.compare(todayValue) < 0 ? existingStart : todayValue;
   return (
     <div>
       <label className="mb-1 block text-sm font-medium text-slate-700">
-        Date Range
+        Start &amp; due date
       </label>
       <DateRangePicker
-        aria-label="Task date range"
+        aria-label="Task start and due date"
         value={toDateRangeValue(startDate, dueDate)}
         onChange={onChange}
-        minValue={today(getLocalTimeZone())}
+        minValue={minValue}
+        validationBehavior="aria"
         className="w-full"
       >
         <DateField.Group fullWidth>

@@ -39,7 +39,7 @@ const ALL_PROJECTS = "all";
 const DRAG_TYPE = "application/x-wpm-my-task";
 
 type BoardColumn = {
-  id: "backlogs" | "in-progress" | "in-review" | "done";
+  id: "backlogs" | "in-progress" | "in-review" | "blocked" | "done";
   title: string;
   status: TaskStatus;
   includes: TaskStatus[];
@@ -50,7 +50,7 @@ const COLUMNS: BoardColumn[] = [
     id: "backlogs",
     title: "Backlogs",
     status: "Backlog",
-    includes: ["Backlog", "To Do"],
+    includes: ["Backlog"],
   },
   {
     id: "in-progress",
@@ -63,6 +63,12 @@ const COLUMNS: BoardColumn[] = [
     title: "In Review",
     status: "Review",
     includes: ["Review"],
+  },
+  {
+    id: "blocked",
+    title: "Blocked",
+    status: "Blocked",
+    includes: ["Blocked"],
   },
   { id: "done", title: "Done", status: "Done", includes: ["Done"] },
 ];

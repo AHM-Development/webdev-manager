@@ -278,6 +278,23 @@ async function updatePriority(projectId, priority, user, context) {
   return project;
 }
 
+async function updateStatus(projectId, status, user, context) {
+  await getProject(projectId);
+  var normalized = options.normalizeOption(status, options.PROJECT_STATUSES, null);
+  if (!normalized) throw badRequest('Status is invalid.');
+
+  await db.query(
+    `UPDATE projects
+     SET status = :status, updated_by = :userId
+     WHERE id = :projectId AND deleted_at IS NULL`,
+    { projectId: projectId, status: normalized, userId: user.id }
+  );
+
+  var project = await getProject(projectId);
+  await logProjectActivity(user, context, 'projects.status_update', project);
+  return project;
+}
+
 async function deleteProject(projectId, user, context) {
   var project = await getProject(projectId);
   await db.query(
@@ -426,6 +443,7 @@ module.exports = {
   createProject: createProject,
   updateProject: updateProject,
   updatePriority: updatePriority,
+  updateStatus: updateStatus,
   deleteProject: deleteProject,
   previewImport: previewImport,
   importProjects: importProjects,

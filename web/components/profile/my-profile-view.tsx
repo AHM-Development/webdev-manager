@@ -40,6 +40,7 @@ import {
 import { notify } from "@/libs/notify";
 import { listAuthSessions, revokeAuthSession, type AuthSession } from "@/libs/api/auth";
 import { useAuthContext } from "@/libs/auth/auth-context";
+import { ConnectedApps } from "@/components/agent/connected-apps";
 
 export function MyProfileView() {
   const otpModal = useOverlayState();
@@ -307,6 +308,8 @@ export function MyProfileView() {
           )}
         </div>
       </section>
+
+      <ConnectedApps />
 
       <PasswordOtpModal
         state={otpModal}

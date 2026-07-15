@@ -74,6 +74,20 @@ async function updatePriority(req, res, next) {
   }
 }
 
+async function updateStatus(req, res, next) {
+  try {
+    var project = await service.updateStatus(
+      req.params.projectId,
+      req.body && req.body.status,
+      req.user,
+      context(req)
+    );
+    res.json({ project: project });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function remove(req, res, next) {
   try {
     await service.deleteProject(req.params.projectId, req.user, context(req));
@@ -112,6 +126,7 @@ module.exports = {
   create: create,
   update: update,
   updatePriority: updatePriority,
+  updateStatus: updateStatus,
   remove: remove,
   previewImport: previewImport,
   importProjects: importProjects,

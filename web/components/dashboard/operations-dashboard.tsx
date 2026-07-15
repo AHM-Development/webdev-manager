@@ -3,14 +3,17 @@
 import { Chip } from "@heroui/react";
 import {
   ArrowUpRight,
+  Ban,
   Bug,
   CalendarClock,
   ClipboardList,
   FolderKanban,
+  Layers,
   ListChecks,
   NotebookPen,
   Plus,
   Radar,
+  Rocket,
   ShieldAlert,
 } from "lucide-react";
 import Link from "next/link";
@@ -28,6 +31,7 @@ import {
   type Task,
 } from "@/components/tasks/data";
 import type { Credential } from "@/components/website-users/data";
+import { listClientOverview, type ClientOverviewResult } from "@/libs/api/client-logs";
 import { listIssues } from "@/libs/api/issues";
 import { listNotes, type Note } from "@/libs/api/notes";
 import { listProjects } from "@/libs/api/projects";
@@ -38,6 +42,7 @@ import {
   type HealthWebsiteRow,
 } from "@/libs/api/website-health";
 import { listWebsiteCredentials } from "@/libs/api/website-users";
+import { useAuth } from "@/libs/hooks/useAuth";
 import { notify } from "@/libs/notify";
 
 type AttentionItem = {
@@ -141,6 +146,9 @@ function EmptyRow({ text }: { text: string }) {
 }
 
 export function OperationsDashboard() {
+  const { user } = useAuth();
+  const canSeeClientLogs = user?.role === "superadmin" || user?.role === "web_dev_manager";
+  const [clientLogs, setClientLogs] = useState<ClientOverviewResult | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [workspaceTasks, setWorkspaceTasks] = useState<Task[]>([]);
   const [myTasks, setMyTasks] = useState<Task[]>([]);
@@ -191,6 +199,19 @@ export function OperationsDashboard() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!canSeeClientLogs) {
+      setClientLogs(null);
+      return;
+    }
+    let active = true;
+    // pageSize:1 — we only need the summary counts, not the client rows.
+    listClientOverview({ page: 1, pageSize: 1 })
+      .then((result) => { if (active) setClientLogs(result); })
+      .catch(() => { if (active) setClientLogs(null); });
+    return () => { active = false; };
+  }, [canSeeClientLogs]);
 
   const scannedHealth = healthRows.filter((row) => summaryOf(row));
 
@@ -345,6 +366,30 @@ export function OperationsDashboard() {
           );
         })}
       </section>
+
+      {canSeeClientLogs && clientLogs && (
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: "Client Timelines", value: clientLogs.summary.total, detail: `${clientLogs.summary.notCreated} not set up`, icon: Layers, tone: "text-[#0b7de3]" },
+            { label: "Delayed Clients", value: clientLogs.summary.delayed, detail: "Behind schedule", icon: CalendarClock, tone: clientLogs.summary.delayed ? "text-red-600" : "text-green-600" },
+            { label: "Blocked Clients", value: clientLogs.summary.blocked, detail: "Launch blocked", icon: Ban, tone: clientLogs.summary.blocked ? "text-red-600" : "text-green-600" },
+            { label: "Approaching Launch", value: clientLogs.summary.approachingLaunch, detail: `${clientLogs.summary.live} live`, icon: Rocket, tone: clientLogs.summary.approachingLaunch ? "text-amber-600" : "text-green-600" },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link key={item.label} href="/dashboard/client-logs" className="metric-card group min-h-[132px] p-4 transition-transform hover:-translate-y-0.5">
+                <div className="flex items-center justify-between">
+                  <Icon className={`h-5 w-5 ${item.tone}`} />
+                  <ArrowUpRight className="h-4 w-4 text-slate-300 group-hover:text-[#0b7de3]" />
+                </div>
+                <p className={`mt-4 text-2xl font-semibold ${item.tone}`}>{item.value}</p>
+                <p className="mt-1 text-sm font-semibold text-slate-800">{item.label}</p>
+                <p className="mt-1 text-xs text-slate-500">{item.detail}</p>
+              </Link>
+            );
+          })}
+        </section>
+      )}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
         <div className="app-panel overflow-hidden p-0">

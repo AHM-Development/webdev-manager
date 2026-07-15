@@ -4,6 +4,7 @@ import { Button } from "@heroui/react";
 import { Flag, LayoutGrid } from "lucide-react";
 
 import { StatusSelect } from "./status-select";
+import { checklistProgress } from "./task-utils";
 import type { Task, TaskPriority, TaskStatus } from "./data";
 
 const priorityIconClass: Record<TaskPriority, string> = {
@@ -26,6 +27,7 @@ export function TaskKanbanCard({
   /** Total number of tasks in this card's project, shown on the card. */
   projectTaskCount?: number;
 }) {
+  const progress = checklistProgress(task);
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium text-gray-900">{task.title}</p>
@@ -37,6 +39,17 @@ export function TaskKanbanCard({
       )}
       {task.dueDate && (
         <span className="block text-xs text-gray-400">{task.dueDate}</span>
+      )}
+      {progress.total > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-[11px] font-medium text-slate-500">
+            <span>Checklist</span>
+            <span className="tabular-nums">{progress.completed}/{progress.total}</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-[#0b7de3]" style={{ width: `${progress.percent}%` }} />
+          </div>
+        </div>
       )}
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">

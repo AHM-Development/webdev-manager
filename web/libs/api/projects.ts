@@ -65,6 +65,17 @@ export async function updateProjectPriority(
   return data.project;
 }
 
+export async function updateProjectStatus(
+  projectId: string,
+  status: Project["status"]
+) {
+  const { data } = await apiClient.patch<{ project: Project }>(
+    endpoints.projects.status(projectId),
+    { status }
+  );
+  return data.project;
+}
+
 export async function deleteProject(projectId: string) {
   await apiClient.delete(endpoints.projects.delete(projectId));
 }

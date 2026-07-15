@@ -15,7 +15,6 @@ import { STATUSES, type TaskStatus } from "./data";
 /** Color-coded chip classes per status. */
 const statusChip: Record<TaskStatus, string> = {
   Backlog: "bg-gray-100 text-gray-700",
-  "To Do": "bg-gray-100 text-gray-700",
   "In Progress": "bg-blue-100 text-blue-700",
   Review: "bg-amber-100 text-amber-700",
   Blocked: "bg-red-100 text-red-700",

@@ -1,6 +1,5 @@
 export type TaskStatus =
   | "Backlog"
-  | "To Do"
   | "In Progress"
   | "Review"
   | "Blocked"
@@ -34,12 +33,16 @@ export type Task = {
   priority: TaskPriority;
   startDate?: string;
   dueDate?: string;
+  // Client Logs linkage (optional; set when a task belongs to a project stage).
+  stageId?: string | null;
+  websiteId?: string | null;
+  reviewerUserId?: string | null;
+  isCritical?: boolean;
 };
 
 /** All task statuses, in workflow order (used for the status menu + column filter). */
 export const STATUSES: TaskStatus[] = [
   "Backlog",
-  "To Do",
   "In Progress",
   "Review",
   "Blocked",
@@ -88,7 +91,6 @@ export const statusColor: Record<
   "success" | "warning" | "danger" | "default" | "accent"
 > = {
   Backlog: "default",
-  "To Do": "default",
   "In Progress": "accent",
   Review: "warning",
   Blocked: "danger",
@@ -99,20 +101,20 @@ export const tasks: Task[] = [
   // p1 — Acme Dental
   { id: "t1", projectId: "p1", title: "Set up staging environment", status: "Done", assignee: "Sarah Chen", priority: "Medium" },
   { id: "t2", projectId: "p1", title: "Homepage hero redesign", status: "In Progress", assignee: "Sarah Chen", priority: "High", dueDate: "2026-06-12" },
-  { id: "t3", projectId: "p1", title: "Booking form integration", status: "To Do", assignee: "Mike Ross", priority: "High" },
+  { id: "t3", projectId: "p1", title: "Booking form integration", status: "Backlog", assignee: "Mike Ross", priority: "High" },
   { id: "t4", projectId: "p1", title: "SEO meta + sitemap", status: "Backlog", assignee: "Unassigned", priority: "Low" },
   { id: "t5", projectId: "p1", title: "Cookie consent banner", status: "Review", assignee: "Tom Baker", priority: "Medium" },
   { id: "t6", projectId: "p1", title: "Accessibility audit", status: "Backlog", assignee: "Aisha Khan", priority: "Medium" },
 
   // p2 — Bright Smiles
   { id: "t7", projectId: "p2", title: "Single-page layout", status: "In Progress", assignee: "Mike Ross", priority: "High", dueDate: "2026-06-09" },
-  { id: "t8", projectId: "p2", title: "Contact section copy", status: "To Do", assignee: "Mike Ross", priority: "Medium" },
+  { id: "t8", projectId: "p2", title: "Contact section copy", status: "Backlog", assignee: "Mike Ross", priority: "Medium" },
   { id: "t9", projectId: "p2", title: "Mobile nav polish", status: "Backlog", assignee: "Unassigned", priority: "Low" },
 
   // p3 — GreenLeaf Clinic
   { id: "t10", projectId: "p3", title: "Wireframes sign-off", status: "Done", assignee: "Aisha Khan", priority: "Medium" },
   { id: "t11", projectId: "p3", title: "Services CMS model", status: "In Progress", assignee: "Aisha Khan", priority: "High" },
-  { id: "t12", projectId: "p3", title: "Team page", status: "To Do", assignee: "Tom Baker", priority: "Low" },
+  { id: "t12", projectId: "p3", title: "Team page", status: "Backlog", assignee: "Tom Baker", priority: "Low" },
   { id: "t13", projectId: "p3", title: "Appointment API hookup", status: "Backlog", assignee: "Mike Ross", priority: "High", dueDate: "2026-06-20" },
 
   // p4 — Urban Physio
@@ -121,11 +123,11 @@ export const tasks: Task[] = [
 
   // p6 — PeakFit Studio
   { id: "t16", projectId: "p6", title: "Class schedule widget", status: "In Progress", assignee: "Aisha Khan", priority: "High" },
-  { id: "t17", projectId: "p6", title: "Pricing table", status: "To Do", assignee: "Aisha Khan", priority: "Medium" },
+  { id: "t17", projectId: "p6", title: "Pricing table", status: "Backlog", assignee: "Aisha Khan", priority: "Medium" },
   { id: "t18", projectId: "p6", title: "Newsletter signup", status: "Backlog", assignee: "Unassigned", priority: "Low" },
 
   // p7 — CityVet
-  { id: "t19", projectId: "p7", title: "Emergency banner", status: "To Do", assignee: "Mike Ross", priority: "High", dueDate: "2026-06-08" },
+  { id: "t19", projectId: "p7", title: "Emergency banner", status: "Backlog", assignee: "Mike Ross", priority: "High", dueDate: "2026-06-08" },
   { id: "t20", projectId: "p7", title: "Vet profiles", status: "In Progress", assignee: "Mike Ross", priority: "Medium" },
   { id: "t21", projectId: "p7", title: "Map embed", status: "Backlog", assignee: "Unassigned", priority: "Low" },
 ];

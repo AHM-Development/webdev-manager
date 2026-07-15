@@ -24,6 +24,7 @@ router.post('/', auth.requireRoles(roles.WRITE_ROLES), controller.create);
 router.get('/:projectId', controller.get);
 router.patch('/:projectId', auth.requireRoles(roles.WRITE_ROLES), controller.update);
 router.patch('/:projectId/priority', auth.requireRoles(roles.WRITE_ROLES), controller.updatePriority);
+router.patch('/:projectId/status', auth.requireRoles(roles.WRITE_ROLES), controller.updateStatus);
 router.delete('/:projectId', auth.requireRoles([roles.ROLES.SUPERADMIN]), controller.remove);
 
 module.exports = router;

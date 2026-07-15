@@ -1,7 +1,7 @@
 var db = require('../../db/pool');
 var activity = require('../auth/activity.service');
 
-var STATUSES = ['Backlog', 'To Do', 'In Progress', 'Review', 'Blocked', 'Done'];
+var STATUSES = ['Backlog', 'In Progress', 'Review', 'Blocked', 'Done'];
 var PRIORITIES = ['Low', 'Medium', 'High'];
 
 function fail(status, code, message) {
@@ -131,6 +131,13 @@ function rowToTask(row) {
     startDate: formatDate(row.start_date),
     dueDate: formatDate(row.due_date),
     sortOrder: row.sort_order,
+    stageId: row.stage_id ? String(row.stage_id) : null,
+    websiteId: row.website_id ? String(row.website_id) : null,
+    reviewerUserId: row.reviewer_user_id ? String(row.reviewer_user_id) : null,
+    isCritical: !!row.is_critical,
+    acceptanceCriteria: parseJson(row.acceptance_criteria, []),
+    affectedUrls: parseJson(row.affected_urls, []),
+    verificationStatus: row.verification_status || 'unverified',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -237,7 +244,40 @@ async function normalizePayload(input, partial) {
     assigneeName: assignee.name,
     startDate: startDate,
     dueDate: dueDate,
+    // Client Logs linkage (all optional; a plain project task leaves these null).
+    stageId: input.stageId ? String(input.stageId) : null,
+    websiteId: input.websiteId ? String(input.websiteId) : null,
+    reviewerUserId: input.reviewerUserId ? String(input.reviewerUserId) : null,
+    isCritical: input.isCritical ? 1 : 0,
+    acceptanceCriteria: Array.isArray(input.acceptanceCriteria) ? JSON.stringify(input.acceptanceCriteria) : null,
+    affectedUrls: Array.isArray(input.affectedUrls) ? JSON.stringify(input.affectedUrls) : null,
+    originMeetingActionId: input.originMeetingActionId ? String(input.originMeetingActionId) : null,
   };
+}
+
+/** Update only the stage-link columns that were actually provided (never wipes
+ *  a task's stage on an ordinary edit that omits them). */
+async function applyTaskLinkFields(taskId, input) {
+  var columns = {
+    stageId: 'stage_id',
+    websiteId: 'website_id',
+    reviewerUserId: 'reviewer_user_id',
+    isCritical: 'is_critical',
+    acceptanceCriteria: 'acceptance_criteria',
+    affectedUrls: 'affected_urls',
+  };
+  var sets = [];
+  var params = { taskId: taskId };
+  Object.keys(columns).forEach(function(key) {
+    if (!(key in input)) return;
+    var column = columns[key];
+    if (key === 'isCritical') params[key] = input[key] ? 1 : 0;
+    else if (key === 'acceptanceCriteria' || key === 'affectedUrls') params[key] = Array.isArray(input[key]) ? JSON.stringify(input[key]) : null;
+    else params[key] = input[key] ? String(input[key]) : null;
+    sets.push(column + ' = :' + key);
+  });
+  if (!sets.length) return;
+  await db.query('UPDATE tasks SET ' + sets.join(', ') + ' WHERE id = :taskId AND deleted_at IS NULL', params);
 }
 
 async function createTask(input, user, context) {
@@ -245,13 +285,22 @@ async function createTask(input, user, context) {
   var sortOrder = await nextSortOrder(payload.projectId);
   var result = await db.query(
     `INSERT INTO tasks
-      (project_id, title, description, checklist, attachments, status, priority,
-       assignee_user_id, assignee_name, start_date, due_date, sort_order, created_by, updated_by)
+      (project_id, website_id, stage_id, title, description, checklist, attachments, status, priority,
+       assignee_user_id, assignee_name, reviewer_user_id, start_date, due_date, is_critical,
+       acceptance_criteria, affected_urls, origin_meeting_action_id, sort_order, created_by, updated_by)
      VALUES
-      (:projectId, :title, :description, :checklist, :attachments, :status, :priority,
-       :assigneeUserId, :assigneeName, :startDate, :dueDate, :sortOrder, :userId, :userId)`,
+      (:projectId, :websiteId, :stageId, :title, :description, :checklist, :attachments, :status, :priority,
+       :assigneeUserId, :assigneeName, :reviewerUserId, :startDate, :dueDate, :isCritical,
+       :acceptanceCriteria, :affectedUrls, :originMeetingActionId, :sortOrder, :userId, :userId)`,
     {
       projectId: payload.projectId,
+      websiteId: payload.websiteId,
+      stageId: payload.stageId,
+      reviewerUserId: payload.reviewerUserId,
+      isCritical: payload.isCritical,
+      acceptanceCriteria: payload.acceptanceCriteria,
+      affectedUrls: payload.affectedUrls,
+      originMeetingActionId: payload.originMeetingActionId,
       title: payload.title,
       description: payload.description || null,
       checklist: JSON.stringify(payload.checklist),
@@ -305,6 +354,7 @@ async function updateTask(taskId, input, user, context) {
       userId: user.id,
     }
   );
+  await applyTaskLinkFields(taskId, input || {});
   var task = await getTask(taskId);
   await logTaskActivity(user, context, 'tasks.update', task);
   return task;

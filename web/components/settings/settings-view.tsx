@@ -41,6 +41,7 @@ import {
 import { notify } from "@/libs/notify";
 
 import { settingsSchema, type SettingsFormValues } from "./schema";
+import { ClientLogsTemplateSection } from "./client-logs-template-section";
 
 type GoogleStatus = "Disconnected" | "Connected";
 type GoogleTestStatus = "Not tested" | "Ready" | "Failed";
@@ -514,6 +515,7 @@ export function SettingsView() {
   };
 
   return (
+    <div className="space-y-5">
     <form className="space-y-5" onSubmit={save}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -830,5 +832,7 @@ export function SettingsView() {
         </div>
       </Section>
     </form>
+    <ClientLogsTemplateSection />
+    </div>
   );
 }

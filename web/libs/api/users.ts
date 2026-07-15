@@ -19,7 +19,13 @@ export type ApiUser = {
   dateOfBirth: string | null;
   gender: "male" | "female" | null;
   avatarUrl: string | null;
-  role: "superadmin" | "developer" | "spectator";
+  role:
+    | "superadmin"
+    | "web_dev_manager"
+    | "developer"
+    | "designer"
+    | "client_success_manager"
+    | "spectator";
   status: "active" | "invited" | "disabled";
   invitedAt: string | null;
   inviteAcceptedAt: string | null;

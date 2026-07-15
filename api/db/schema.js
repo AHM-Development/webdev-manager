@@ -18,18 +18,20 @@ async function alterIgnoreDuplicate(sql) {
 
 async function ensureFinalRoles(tableName) {
   var rows = await db.query("SHOW COLUMNS FROM " + tableName + " LIKE 'role'");
-  var expected = "enum('superadmin','developer','spectator')";
+  var expected = "enum('superadmin','web_dev_manager','developer','designer','client_success_manager','spectator')";
   if (rows[0] && String(rows[0].Type).toLowerCase() === expected) return;
 
+  // Expand to a superset of every legacy + current value so no row is truncated,
+  // migrate the legacy values, then collapse to the canonical role set.
   await db.query(
     "ALTER TABLE " + tableName +
-      " MODIFY role ENUM('superadmin', 'admin', 'developer', 'viewer', 'spectator') NOT NULL DEFAULT 'spectator'"
+      " MODIFY role ENUM('superadmin', 'admin', 'web_dev_manager', 'developer', 'designer', 'client_success_manager', 'viewer', 'spectator') NOT NULL DEFAULT 'spectator'"
   );
   await db.query("UPDATE " + tableName + " SET role = 'developer' WHERE role = 'admin'");
   await db.query("UPDATE " + tableName + " SET role = 'spectator' WHERE role = 'viewer'");
   await db.query(
     "ALTER TABLE " + tableName +
-      " MODIFY role ENUM('superadmin', 'developer', 'spectator') NOT NULL DEFAULT 'spectator'"
+      " MODIFY role ENUM('superadmin', 'web_dev_manager', 'developer', 'designer', 'client_success_manager', 'spectator') NOT NULL DEFAULT 'spectator'"
   );
 }
 
@@ -255,7 +257,7 @@ async function ensureSchema() {
       description TEXT NULL,
       checklist JSON NULL,
       attachments JSON NULL,
-      status ENUM('Backlog', 'To Do', 'In Progress', 'Review', 'Blocked', 'Done') NOT NULL DEFAULT 'Backlog',
+      status ENUM('Backlog', 'In Progress', 'Review', 'Blocked', 'Done') NOT NULL DEFAULT 'Backlog',
       priority ENUM('Low', 'Medium', 'High') NOT NULL DEFAULT 'Medium',
       assignee_user_id BIGINT UNSIGNED NULL,
       assignee_name VARCHAR(160) NOT NULL DEFAULT 'Unassigned',
@@ -735,6 +737,442 @@ async function ensureSchema() {
        'Analyse the visible page text and return the required JSON findings (checkId "seo.placeholder-content") for any placeholder or unfinished content. If the copy looks like finished, real content, return an empty findings array.\n\nEVIDENCE:\n{{evidence}}',
        NULL, 0.10, 2000, 1)
   `);
+
+  // ===================== Client Logs (per-client / project stages) =====================
+
+  // Client Logs were re-scoped from website to project (client). If ANY of the
+  // Client Logs tables still carry a legacy `website_id` column (a new feature
+  // with no production data, possibly partially migrated), drop and recreate them
+  // all keyed by project_id. Stage templates are client-agnostic and preserved.
+  var legacyCheckTables = ['client_log_stages', 'client_log_stage_history', 'website_checks', 'meetings', 'launch_readiness'];
+  var clientLogsLegacy = false;
+  for (var lc = 0; lc < legacyCheckTables.length; lc += 1) {
+    var legacyCols = await db.query("SHOW COLUMNS FROM " + legacyCheckTables[lc] + " LIKE 'website_id'").catch(function() { return []; });
+    if (legacyCols && legacyCols[0]) { clientLogsLegacy = true; break; }
+  }
+  if (clientLogsLegacy) {
+    await db.query('SET FOREIGN_KEY_CHECKS = 0');
+    var legacyDrop = [
+      'meeting_actions', 'meetings', 'website_check_items', 'website_checks', 'launch_readiness',
+      'client_log_stage_history', 'client_log_stage_evidence', 'client_log_stage_approvals',
+      'client_log_stage_participants', 'client_log_stage_dependencies', 'client_log_stages',
+    ];
+    for (var d = 0; d < legacyDrop.length; d += 1) {
+      await db.query('DROP TABLE IF EXISTS ' + legacyDrop[d]);
+    }
+    await db.query('SET FOREIGN_KEY_CHECKS = 1');
+  }
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS client_log_templates (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      name VARCHAR(190) NOT NULL,
+      description TEXT NULL,
+      is_default TINYINT(1) NOT NULL DEFAULT 0,
+      created_by BIGINT UNSIGNED NULL,
+      updated_by BIGINT UNSIGNED NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      deleted_at DATETIME NULL,
+      PRIMARY KEY (id),
+      KEY client_log_templates_default_idx (is_default),
+      KEY client_log_templates_deleted_idx (deleted_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS client_log_template_stages (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      template_id BIGINT UNSIGNED NOT NULL,
+      name VARCHAR(190) NOT NULL,
+      description TEXT NULL,
+      position INT UNSIGNED NOT NULL DEFAULT 0,
+      is_required TINYINT(1) NOT NULL DEFAULT 1,
+      is_milestone TINYINT(1) NOT NULL DEFAULT 0,
+      is_launch_blocker TINYINT(1) NOT NULL DEFAULT 0,
+      default_owner_role VARCHAR(64) NULL,
+      estimated_duration_days INT UNSIGNED NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY client_log_template_stages_template_idx (template_id),
+      CONSTRAINT client_log_template_stages_template_fk FOREIGN KEY (template_id)
+        REFERENCES client_log_templates(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS client_log_stages (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      project_id BIGINT UNSIGNED NOT NULL,
+      template_id BIGINT UNSIGNED NULL,
+      name VARCHAR(190) NOT NULL,
+      description TEXT NULL,
+      position INT UNSIGNED NOT NULL DEFAULT 0,
+      status ENUM('not_started','in_progress','awaiting_review','blocked','completed','verified','on_hold') NOT NULL DEFAULT 'not_started',
+      progress TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      planned_start DATE NULL,
+      planned_end DATE NULL,
+      actual_start DATE NULL,
+      actual_end DATE NULL,
+      estimated_duration_days INT UNSIGNED NULL,
+      owner_user_id BIGINT UNSIGNED NULL,
+      reviewer_user_id BIGINT UNSIGNED NULL,
+      priority ENUM('Low','Medium','High','Critical') NOT NULL DEFAULT 'Medium',
+      risk_level ENUM('Low','Medium','High') NOT NULL DEFAULT 'Low',
+      is_required TINYINT(1) NOT NULL DEFAULT 1,
+      is_milestone TINYINT(1) NOT NULL DEFAULT 0,
+      is_launch_blocker TINYINT(1) NOT NULL DEFAULT 0,
+      is_on_hold TINYINT(1) NOT NULL DEFAULT 0,
+      created_by BIGINT UNSIGNED NULL,
+      updated_by BIGINT UNSIGNED NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      deleted_at DATETIME NULL,
+      PRIMARY KEY (id),
+      KEY client_log_stages_project_idx (project_id),
+      KEY client_log_stages_status_idx (status),
+      KEY client_log_stages_owner_idx (owner_user_id),
+      KEY client_log_stages_reviewer_idx (reviewer_user_id),
+      KEY client_log_stages_planned_end_idx (planned_end),
+      KEY client_log_stages_deleted_idx (deleted_at),
+      CONSTRAINT client_log_stages_project_fk FOREIGN KEY (project_id)
+        REFERENCES projects(id) ON DELETE CASCADE,
+      CONSTRAINT client_log_stages_owner_fk FOREIGN KEY (owner_user_id)
+        REFERENCES users(id) ON DELETE SET NULL,
+      CONSTRAINT client_log_stages_reviewer_fk FOREIGN KEY (reviewer_user_id)
+        REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS client_log_stage_dependencies (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      stage_id BIGINT UNSIGNED NOT NULL,
+      depends_on_stage_id BIGINT UNSIGNED NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY client_log_stage_dep_unique (stage_id, depends_on_stage_id),
+      KEY client_log_stage_dep_depends_idx (depends_on_stage_id),
+      CONSTRAINT client_log_stage_dep_stage_fk FOREIGN KEY (stage_id)
+        REFERENCES client_log_stages(id) ON DELETE CASCADE,
+      CONSTRAINT client_log_stage_dep_target_fk FOREIGN KEY (depends_on_stage_id)
+        REFERENCES client_log_stages(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS client_log_stage_participants (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      stage_id BIGINT UNSIGNED NOT NULL,
+      user_id BIGINT UNSIGNED NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY client_log_stage_participant_unique (stage_id, user_id),
+      KEY client_log_stage_participant_user_idx (user_id),
+      CONSTRAINT client_log_stage_participant_stage_fk FOREIGN KEY (stage_id)
+        REFERENCES client_log_stages(id) ON DELETE CASCADE,
+      CONSTRAINT client_log_stage_participant_user_fk FOREIGN KEY (user_id)
+        REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS client_log_stage_approvals (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      stage_id BIGINT UNSIGNED NOT NULL,
+      type ENUM('reviewer','internal','client') NOT NULL DEFAULT 'reviewer',
+      decision ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+      approved_by BIGINT UNSIGNED NULL,
+      approved_by_name VARCHAR(190) NULL,
+      note TEXT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY client_log_stage_approval_stage_idx (stage_id),
+      CONSTRAINT client_log_stage_approval_stage_fk FOREIGN KEY (stage_id)
+        REFERENCES client_log_stages(id) ON DELETE CASCADE,
+      CONSTRAINT client_log_stage_approval_user_fk FOREIGN KEY (approved_by)
+        REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS client_log_stage_evidence (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      stage_id BIGINT UNSIGNED NOT NULL,
+      task_id BIGINT UNSIGNED NULL,
+      type ENUM('link','file','image','note') NOT NULL DEFAULT 'link',
+      url VARCHAR(1024) NULL,
+      description TEXT NULL,
+      uploaded_by BIGINT UNSIGNED NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY client_log_stage_evidence_stage_idx (stage_id),
+      CONSTRAINT client_log_stage_evidence_stage_fk FOREIGN KEY (stage_id)
+        REFERENCES client_log_stages(id) ON DELETE CASCADE,
+      CONSTRAINT client_log_stage_evidence_user_fk FOREIGN KEY (uploaded_by)
+        REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS client_log_stage_history (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      stage_id BIGINT UNSIGNED NOT NULL,
+      project_id BIGINT UNSIGNED NULL,
+      user_id BIGINT UNSIGNED NULL,
+      user_name VARCHAR(190) NULL,
+      action VARCHAR(96) NOT NULL,
+      field VARCHAR(96) NULL,
+      old_value TEXT NULL,
+      new_value TEXT NULL,
+      reason TEXT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY client_log_stage_history_stage_idx (stage_id),
+      KEY client_log_stage_history_created_idx (created_at),
+      CONSTRAINT client_log_stage_history_stage_fk FOREIGN KEY (stage_id)
+        REFERENCES client_log_stages(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS website_checks (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      project_id BIGINT UNSIGNED NOT NULL,
+      stage_id BIGINT UNSIGNED NULL,
+      name VARCHAR(190) NOT NULL,
+      status ENUM('in_progress','passed','failed','completed') NOT NULL DEFAULT 'in_progress',
+      performed_by BIGINT UNSIGNED NULL,
+      performed_by_name VARCHAR(190) NULL,
+      created_by BIGINT UNSIGNED NULL,
+      updated_by BIGINT UNSIGNED NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      deleted_at DATETIME NULL,
+      PRIMARY KEY (id),
+      KEY website_checks_project_idx (project_id),
+      KEY website_checks_stage_idx (stage_id),
+      KEY website_checks_deleted_idx (deleted_at),
+      CONSTRAINT website_checks_project_fk FOREIGN KEY (project_id)
+        REFERENCES projects(id) ON DELETE CASCADE,
+      CONSTRAINT website_checks_stage_fk FOREIGN KEY (stage_id)
+        REFERENCES client_log_stages(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS website_check_items (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      check_id BIGINT UNSIGNED NOT NULL,
+      category VARCHAR(96) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      result ENUM('pending','pass','fail','na') NOT NULL DEFAULT 'pending',
+      comment TEXT NULL,
+      checked_by BIGINT UNSIGNED NULL,
+      checked_at DATETIME NULL,
+      evidence_url VARCHAR(1024) NULL,
+      related_url VARCHAR(1024) NULL,
+      created_task_id BIGINT UNSIGNED NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY website_check_items_check_idx (check_id),
+      KEY website_check_items_result_idx (result),
+      CONSTRAINT website_check_items_check_fk FOREIGN KEY (check_id)
+        REFERENCES website_checks(id) ON DELETE CASCADE,
+      CONSTRAINT website_check_items_task_fk FOREIGN KEY (created_task_id)
+        REFERENCES tasks(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS meetings (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      project_id BIGINT UNSIGNED NOT NULL,
+      stage_id BIGINT UNSIGNED NULL,
+      title VARCHAR(255) NOT NULL,
+      meeting_date DATE NULL,
+      participants JSON NULL,
+      fathom_url VARCHAR(1024) NULL,
+      recording_url VARCHAR(1024) NULL,
+      transcript_url VARCHAR(1024) NULL,
+      summary TEXT NULL,
+      status ENUM('pending','confirmed') NOT NULL DEFAULT 'pending',
+      created_by BIGINT UNSIGNED NULL,
+      updated_by BIGINT UNSIGNED NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      deleted_at DATETIME NULL,
+      PRIMARY KEY (id),
+      KEY meetings_project_idx (project_id),
+      KEY meetings_stage_idx (stage_id),
+      KEY meetings_deleted_idx (deleted_at),
+      CONSTRAINT meetings_project_fk FOREIGN KEY (project_id)
+        REFERENCES projects(id) ON DELETE CASCADE,
+      CONSTRAINT meetings_stage_fk FOREIGN KEY (stage_id)
+        REFERENCES client_log_stages(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS meeting_actions (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      meeting_id BIGINT UNSIGNED NOT NULL,
+      stage_id BIGINT UNSIGNED NULL,
+      task_id BIGINT UNSIGNED NULL,
+      title VARCHAR(255) NOT NULL,
+      description TEXT NULL,
+      priority ENUM('Low','Medium','High','Critical') NOT NULL DEFAULT 'Medium',
+      risk TEXT NULL,
+      affected_areas JSON NULL,
+      acceptance_criteria JSON NULL,
+      suggested_owner_id BIGINT UNSIGNED NULL,
+      suggested_reviewer_id BIGINT UNSIGNED NULL,
+      due_date DATE NULL,
+      source_timestamp VARCHAR(32) NULL,
+      confirmation_status ENUM('awaiting_confirmation','confirmed','rejected') NOT NULL DEFAULT 'awaiting_confirmation',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY meeting_actions_meeting_idx (meeting_id),
+      KEY meeting_actions_confirmation_idx (confirmation_status),
+      KEY meeting_actions_stage_idx (stage_id),
+      CONSTRAINT meeting_actions_meeting_fk FOREIGN KEY (meeting_id)
+        REFERENCES meetings(id) ON DELETE CASCADE,
+      CONSTRAINT meeting_actions_stage_fk FOREIGN KEY (stage_id)
+        REFERENCES client_log_stages(id) ON DELETE SET NULL,
+      CONSTRAINT meeting_actions_task_fk FOREIGN KEY (task_id)
+        REFERENCES tasks(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS launch_readiness (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      project_id BIGINT UNSIGNED NOT NULL,
+      percentage TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      status ENUM('not_ready','at_risk','almost_ready','ready','live','post_launch_review') NOT NULL DEFAULT 'not_ready',
+      blockers JSON NULL,
+      calculated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY launch_readiness_project_unique (project_id),
+      CONSTRAINT launch_readiness_project_fk FOREIGN KEY (project_id)
+        REFERENCES projects(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Link tasks to Client Log stages/websites (additive; no FK constraints so the
+  // migration stays idempotent — integrity is enforced in the service layer).
+  await alterIgnoreDuplicate('ALTER TABLE tasks ADD COLUMN website_id BIGINT UNSIGNED NULL AFTER project_id');
+  await alterIgnoreDuplicate('ALTER TABLE tasks ADD COLUMN stage_id BIGINT UNSIGNED NULL AFTER website_id');
+  await alterIgnoreDuplicate('ALTER TABLE tasks ADD COLUMN reviewer_user_id BIGINT UNSIGNED NULL AFTER assignee_user_id');
+  await alterIgnoreDuplicate('ALTER TABLE tasks ADD COLUMN acceptance_criteria JSON NULL');
+  await alterIgnoreDuplicate('ALTER TABLE tasks ADD COLUMN affected_urls JSON NULL');
+  await alterIgnoreDuplicate('ALTER TABLE tasks ADD COLUMN is_critical TINYINT(1) NOT NULL DEFAULT 0');
+  await alterIgnoreDuplicate("ALTER TABLE tasks ADD COLUMN verification_status ENUM('unverified','awaiting_review','changes_required','verified','client_confirmed') NOT NULL DEFAULT 'unverified'");
+  await alterIgnoreDuplicate('ALTER TABLE tasks ADD COLUMN origin_meeting_action_id BIGINT UNSIGNED NULL');
+  await alterIgnoreDuplicate('ALTER TABLE tasks ADD KEY tasks_stage_idx (stage_id)');
+  await alterIgnoreDuplicate('ALTER TABLE tasks ADD KEY tasks_website_idx (website_id)');
+
+  // Retire the legacy 'To Do' task status: fold existing rows into 'Backlog',
+  // then drop it from the enum. Order matters — migrate rows before MODIFY.
+  await db.query("UPDATE tasks SET status = 'Backlog' WHERE status = 'To Do'").catch(function() {});
+  await db.query("ALTER TABLE tasks MODIFY status ENUM('Backlog', 'In Progress', 'Review', 'Blocked', 'Done') NOT NULL DEFAULT 'Backlog'").catch(function() {});
+
+  // Seed the default 17-stage template once.
+  var existingTemplate = await db.query('SELECT id FROM client_log_templates WHERE is_default = 1 LIMIT 1');
+  if (!existingTemplate[0]) {
+    var seededTemplate = await db.query(
+      'INSERT INTO client_log_templates (name, description, is_default) VALUES (:name, :description, 1)',
+      { name: 'Standard Website Project', description: 'Default 17-stage website delivery timeline.' }
+    );
+    var seedTemplateId = seededTemplate.insertId;
+    var defaultStages = [
+      { name: 'Client Onboarding', owner: 'client_success_manager', required: 1 },
+      { name: 'Web Design', owner: 'designer', required: 1 },
+      { name: 'Web Design Handover', owner: 'designer', required: 1 },
+      { name: 'Development Started', owner: 'developer', required: 1 },
+      { name: 'Content Collection', owner: 'client_success_manager', required: 1 },
+      { name: 'Content Upload', owner: 'developer', required: 1 },
+      { name: 'Internal Website Review', owner: 'web_dev_manager', required: 1 },
+      { name: 'Corrections', owner: 'developer', required: 0 },
+      { name: 'Client Demo Meeting', owner: 'client_success_manager', required: 1, milestone: 1 },
+      { name: 'Client Changes', owner: 'web_dev_manager', required: 0 },
+      { name: 'Final Internal Review', owner: 'web_dev_manager', required: 1 },
+      { name: 'Client Approval', owner: 'client_success_manager', required: 1, milestone: 1, blocker: 1 },
+      { name: 'Pre-Launch Checks', owner: 'web_dev_manager', required: 1, blocker: 1 },
+      { name: 'Ready for Launch', owner: 'web_dev_manager', required: 1, milestone: 1, blocker: 1 },
+      { name: 'Website Live', owner: 'web_dev_manager', required: 1, milestone: 1 },
+      { name: 'Post-Launch Review', owner: 'developer', required: 1 },
+      { name: 'Maintenance', owner: null, required: 0 },
+    ];
+    for (var stageIndex = 0; stageIndex < defaultStages.length; stageIndex += 1) {
+      var seedStage = defaultStages[stageIndex];
+      await db.query(
+        `INSERT INTO client_log_template_stages
+           (template_id, name, position, is_required, is_milestone, is_launch_blocker, default_owner_role)
+         VALUES (:templateId, :name, :position, :required, :milestone, :blocker, :owner)`,
+        {
+          templateId: seedTemplateId,
+          name: seedStage.name,
+          position: stageIndex,
+          required: seedStage.required ? 1 : 0,
+          milestone: seedStage.milestone ? 1 : 0,
+          blocker: seedStage.blocker ? 1 : 0,
+          owner: seedStage.owner || null,
+        }
+      );
+    }
+  }
+
+  // ---- Viktor AI agent: OAuth delegation grants + propose/confirm proposals ----
+  await db.query(
+    `CREATE TABLE IF NOT EXISTS agent_grants (
+      id CHAR(36) NOT NULL PRIMARY KEY,
+      user_id BIGINT UNSIGNED NOT NULL,
+      agent VARCHAR(40) NOT NULL DEFAULT 'viktor',
+      scope VARCHAR(255) NOT NULL DEFAULT 'agent:read agent:write',
+      refresh_token_hash CHAR(64) NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_used_at DATETIME NULL,
+      revoked_at DATETIME NULL,
+      CONSTRAINT fk_agent_grants_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      KEY agent_grants_user_idx (user_id),
+      KEY agent_grants_refresh_idx (refresh_token_hash),
+      KEY agent_grants_revoked_idx (revoked_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+  );
+
+  await db.query(
+    `CREATE TABLE IF NOT EXISTS agent_proposals (
+      id CHAR(36) NOT NULL PRIMARY KEY,
+      user_id BIGINT UNSIGNED NOT NULL,
+      grant_id CHAR(36) NULL,
+      agent VARCHAR(40) NOT NULL DEFAULT 'viktor',
+      action_key VARCHAR(80) NOT NULL,
+      args JSON NULL,
+      summary VARCHAR(500) NULL,
+      status ENUM('pending', 'executed', 'rejected', 'expired') NOT NULL DEFAULT 'pending',
+      proposal_hash CHAR(64) NOT NULL,
+      result JSON NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME NOT NULL,
+      executed_at DATETIME NULL,
+      CONSTRAINT fk_agent_proposals_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      KEY agent_proposals_user_idx (user_id),
+      KEY agent_proposals_status_idx (status),
+      KEY agent_proposals_expires_idx (expires_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+  );
+
+  // Let the activity feed attribute actions to the AI agent.
+  await db
+    .query(
+      "ALTER TABLE website_activity_logs MODIFY source ENUM('user', 'system', 'wordpress_connector', 'scanner', 'scheduler', 'api', 'import', 'ai_agent') NOT NULL DEFAULT 'user'"
+    )
+    .catch(function() {});
 }
 
 module.exports = {

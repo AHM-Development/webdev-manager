@@ -357,6 +357,10 @@ async function ensureSchema() {
     CREATE TABLE IF NOT EXISTS notification_settings (
       id TINYINT UNSIGNED NOT NULL,
       task_assignments_channel ENUM('off', 'email', 'discord', 'both') NOT NULL DEFAULT 'email',
+      reviews_channel ENUM('off', 'email', 'discord', 'both') NOT NULL DEFAULT 'both',
+      client_logs_channel ENUM('off', 'email', 'discord', 'both') NOT NULL DEFAULT 'both',
+      issues_channel ENUM('off', 'email', 'discord', 'both') NOT NULL DEFAULT 'email',
+      security_channel ENUM('off', 'email', 'discord', 'both') NOT NULL DEFAULT 'both',
       health_alerts_channel ENUM('off', 'email', 'discord', 'both') NOT NULL DEFAULT 'both',
       password_age_alerts_channel ENUM('off', 'email', 'discord', 'both') NOT NULL DEFAULT 'discord',
       daily_user_summary_channel ENUM('off', 'email', 'discord', 'both') NOT NULL DEFAULT 'email',
@@ -442,6 +446,21 @@ async function ensureSchema() {
       KEY notification_delivery_attempts_notification_idx (notification_id),
       CONSTRAINT notification_delivery_attempts_notification_fk FOREIGN KEY (notification_id)
         REFERENCES notifications(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Tracks the last run of each scheduled digest job (daily summary, pre-shift,
+  // weekly digest) so the scheduler fires each at most once per day/week even
+  // across API restarts. last_run_date is a CHAR(10) 'YYYY-MM-DD' in the
+  // configured timezone to keep due-comparisons free of DB-timezone drift.
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS notification_job_runs (
+      kind VARCHAR(40) NOT NULL,
+      last_run_at DATETIME NULL,
+      last_run_date CHAR(10) NULL,
+      last_summary JSON NULL,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (kind)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
@@ -1076,6 +1095,12 @@ async function ensureSchema() {
   await alterIgnoreDuplicate('ALTER TABLE tasks ADD KEY tasks_stage_idx (stage_id)');
   await alterIgnoreDuplicate('ALTER TABLE tasks ADD KEY tasks_website_idx (website_id)');
 
+  // Additional notification categories (existing DBs).
+  await alterIgnoreDuplicate("ALTER TABLE notification_settings ADD COLUMN reviews_channel ENUM('off','email','discord','both') NOT NULL DEFAULT 'both'");
+  await alterIgnoreDuplicate("ALTER TABLE notification_settings ADD COLUMN client_logs_channel ENUM('off','email','discord','both') NOT NULL DEFAULT 'both'");
+  await alterIgnoreDuplicate("ALTER TABLE notification_settings ADD COLUMN issues_channel ENUM('off','email','discord','both') NOT NULL DEFAULT 'email'");
+  await alterIgnoreDuplicate("ALTER TABLE notification_settings ADD COLUMN security_channel ENUM('off','email','discord','both') NOT NULL DEFAULT 'both'");
+
   // Retire the legacy 'To Do' task status: fold existing rows into 'Backlog',
   // then drop it from the enum. Order matters — migrate rows before MODIFY.
   await db.query("UPDATE tasks SET status = 'Backlog' WHERE status = 'To Do'").catch(function() {});
@@ -1173,6 +1198,49 @@ async function ensureSchema() {
       "ALTER TABLE website_activity_logs MODIFY source ENUM('user', 'system', 'wordpress_connector', 'scanner', 'scheduler', 'api', 'import', 'ai_agent') NOT NULL DEFAULT 'user'"
     )
     .catch(function() {});
+
+  // Manual, evidence-backed forms test verification (durable per website+form).
+  await db.query(
+    `CREATE TABLE IF NOT EXISTS website_form_verifications (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      website_id BIGINT UNSIGNED NOT NULL,
+      form_key VARCHAR(191) NOT NULL,
+      status ENUM('passed', 'failed') NOT NULL,
+      note TEXT NULL,
+      screenshots JSON NULL,
+      form_signature VARCHAR(64) NULL,
+      tested_by BIGINT UNSIGNED NULL,
+      tested_by_name VARCHAR(190) NULL,
+      tested_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fk_form_verifications_website FOREIGN KEY (website_id) REFERENCES project_websites(id) ON DELETE CASCADE,
+      CONSTRAINT fk_form_verifications_user FOREIGN KEY (tested_by) REFERENCES users(id) ON DELETE SET NULL,
+      UNIQUE KEY form_verifications_website_form_uk (website_id, form_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+  );
+
+  // Manual per-page Design QA sign-off (approved / changes requested), durable
+  // on the website so it survives re-scans. Mirrors website_form_verifications.
+  await db.query(
+    `CREATE TABLE IF NOT EXISTS website_design_verifications (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      website_id BIGINT UNSIGNED NOT NULL,
+      page_key VARCHAR(191) NOT NULL,
+      status ENUM('approved', 'rejected') NOT NULL,
+      note TEXT NULL,
+      screenshots JSON NULL,
+      design_signature VARCHAR(64) NULL,
+      tested_by BIGINT UNSIGNED NULL,
+      tested_by_name VARCHAR(190) NULL,
+      tested_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fk_design_verifications_website FOREIGN KEY (website_id) REFERENCES project_websites(id) ON DELETE CASCADE,
+      CONSTRAINT fk_design_verifications_user FOREIGN KEY (tested_by) REFERENCES users(id) ON DELETE SET NULL,
+      UNIQUE KEY design_verifications_website_page_uk (website_id, page_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+  );
 }
 
 module.exports = {

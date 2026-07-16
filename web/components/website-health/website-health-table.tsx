@@ -189,6 +189,8 @@ export function WebsiteHealthTable() {
   const pairingModal = useOverlayState();
   const profileModal = useOverlayState();
   const [rows, setRows] = useState<HealthWebsiteRow[]>([]);
+  // Full list (unpaginated) for the scan modal's website picker.
+  const [allWebsites, setAllWebsites] = useState<HealthWebsiteRow[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -234,6 +236,13 @@ export function WebsiteHealthTable() {
     getWebsiteHealthCapabilities()
       .then(setCapabilities)
       .catch(() => setCapabilities({ lighthouse: false, ai: false }));
+  }, []);
+
+  // Load every website once for the scan modal's picker (not just the current page).
+  useEffect(() => {
+    listWebsiteHealth({ page: 1, pageSize: 500 })
+      .then((result) => setAllWebsites(result.websites))
+      .catch(() => setAllWebsites([]));
   }, []);
 
   const openScan = (websiteId?: string) => {
@@ -417,7 +426,7 @@ export function WebsiteHealthTable() {
       <StartHealthScanModal
         key={`${scanPrefill.websiteId ?? "any"}:${scanModal.isOpen ? "open" : "closed"}`}
         state={scanModal}
-        websites={rows}
+        websites={allWebsites.length ? allWebsites : rows}
         capabilities={capabilities}
         defaultWebsiteId={scanPrefill.websiteId}
         lockWebsite={scanPrefill.locked}

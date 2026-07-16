@@ -43,9 +43,22 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import type { Project } from "@/components/projects/data";
-import { sendFormTest } from "@/libs/api/website-health";
+import {
+  designSignature,
+  formSignature,
+  listDesignVerifications,
+  listFormVerifications,
+  saveDesignVerification,
+  saveFormVerification,
+  sendFormTest,
+  type DesignVerification,
+  type FormEvidence,
+  type FormVerification,
+} from "@/libs/api/website-health";
+import { assetUrl } from "@/libs/api/client";
 import { useAuth } from "@/libs/hooks/useAuth";
 import { notify } from "@/libs/notify";
+import { ImageUploader } from "@/components/ui/image-uploader";
 
 import {
   summarize,
@@ -609,7 +622,21 @@ function SeoTab({ audit }: { audit: SiteAudit }) {
   );
 }
 
-function DesignTab({ audit }: { audit: SiteAudit }) {
+function DesignTab({ audit, websiteId }: { audit: SiteAudit; websiteId?: string | null }) {
+  const [verifications, setVerifications] = useState<DesignVerification[]>([]);
+
+  useEffect(() => {
+    if (!websiteId) return;
+    listDesignVerifications(websiteId).then(setVerifications).catch(() => setVerifications([]));
+  }, [websiteId]);
+
+  const verByKey = new Map(verifications.map((verification) => [verification.pageKey, verification]));
+  const upsertVerification = (verification: DesignVerification) =>
+    setVerifications((current) => [
+      ...current.filter((item) => item.pageKey !== verification.pageKey),
+      verification,
+    ]);
+
   return (
     <div className="space-y-4">
       <Table aria-label="Design QA page results">
@@ -651,29 +678,208 @@ function DesignTab({ audit }: { audit: SiteAudit }) {
         </TableScrollContainer>
       </Table>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        {audit.pages.flatMap((page) =>
-          page.designQa.issues.map((issue) => (
-            <div key={`${page.id}-${issue.id}`} className="rounded-md border border-slate-200 bg-white p-4">
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-slate-950">Design sign-off</h3>
+        <p className="mb-3 text-xs text-slate-500">
+          Manually review each page against its design and record an evidence-backed sign-off. Kept on the
+          website, so it survives re-scans and flags as stale when the design QA result changes.
+        </p>
+        <div className="grid gap-3 lg:grid-cols-2">
+          {audit.pages.map((page) => (
+            <div key={page.id} className="rounded-md border border-slate-200 bg-white p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-950">{issue.title}</p>
-                  <p className="mt-1 text-xs uppercase tracking-[0.12em] text-slate-400">
-                    {page.name} / {issue.viewport}
-                  </p>
+                  <p className="text-sm font-semibold text-slate-950">{page.name}</p>
+                  <p className="mt-1 text-xs text-slate-400">{page.path}</p>
                 </div>
-                <Chip size="sm" variant="soft" color={statusColor(issue.severity)}>
-                  {statusLabel(issue.severity)}
+                <Chip size="sm" variant="soft" color={page.designQa.issues.length ? "warning" : "success"}>
+                  {page.designQa.issues.length} issue{page.designQa.issues.length === 1 ? "" : "s"}
                 </Chip>
               </div>
-              <p className="mt-3 text-sm text-slate-600">{issue.detail}</p>
-              <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                Screenshot evidence: {issue.screenshot}
-              </div>
+              {websiteId ? (
+                <DesignVerificationBlock
+                  websiteId={websiteId}
+                  page={page}
+                  verification={verByKey.get(page.path)}
+                  onSaved={upsertVerification}
+                />
+              ) : (
+                <p className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-400">
+                  Sign-off available once the website is saved.
+                </p>
+              )}
             </div>
-          ))
-        )}
+          ))}
+        </div>
       </div>
+
+      {audit.pages.some((page) => page.designQa.issues.length > 0) && (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {audit.pages.flatMap((page) =>
+            page.designQa.issues.map((issue) => (
+              <div key={`${page.id}-${issue.id}`} className="rounded-md border border-slate-200 bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-950">{issue.title}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.12em] text-slate-400">
+                      {page.name} / {issue.viewport}
+                    </p>
+                  </div>
+                  <Chip size="sm" variant="soft" color={statusColor(issue.severity)}>
+                    {statusLabel(issue.severity)}
+                  </Chip>
+                </div>
+                <p className="mt-3 text-sm text-slate-600">{issue.detail}</p>
+                <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                  Screenshot evidence: {issue.screenshot}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DesignVerificationBlock({
+  websiteId,
+  page,
+  verification,
+  onSaved,
+}: {
+  websiteId: string;
+  page: PageAudit;
+  verification: DesignVerification | undefined;
+  onSaved: (verification: DesignVerification) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [status, setStatus] = useState<"approved" | "rejected">(verification?.status ?? "approved");
+  const [note, setNote] = useState(verification?.note ?? "");
+  const [screenshots, setScreenshots] = useState<FormEvidence[]>(verification?.screenshots ?? []);
+  const [saving, setSaving] = useState(false);
+
+  const signature = designSignature(page.designQa);
+  const stale = verification
+    ? verification.designSignature !== signature ||
+      Date.now() - new Date(verification.testedAt).getTime() > 30 * 86_400_000
+    : false;
+
+  const openEdit = () => {
+    setStatus(verification?.status ?? "approved");
+    setNote(verification?.note ?? "");
+    setScreenshots(verification?.screenshots ?? []);
+    setEditing(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const saved = await saveDesignVerification(websiteId, page.path, {
+        status,
+        note: note.trim(),
+        screenshots,
+        designSignature: signature,
+      });
+      onSaved(saved);
+      setEditing(false);
+      notify.success("Sign-off saved");
+    } catch (error) {
+      notify.error("Could not save sign-off", {
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const STATUS_LABEL = { approved: "Approved", rejected: "Needs work" } as const;
+
+  if (editing) {
+    return (
+      <div className="mt-3 space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+        <div className="flex gap-2">
+          {(["approved", "rejected"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setStatus(value)}
+              className={`rounded-md px-3 py-1 text-xs font-semibold ${
+                status === value
+                  ? value === "approved"
+                    ? "bg-emerald-600 text-white"
+                    : "bg-rose-600 text-white"
+                  : "border border-slate-200 bg-white text-slate-600"
+              }`}
+            >
+              {STATUS_LABEL[value]}
+            </button>
+          ))}
+        </div>
+        <textarea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          rows={2}
+          placeholder="Notes (optional) — e.g. matches the approved Figma frame; hero spacing corrected."
+          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+        />
+        <ImageUploader value={screenshots} onChange={setScreenshots} disabled={saving} />
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="tertiary" isDisabled={saving} onPress={() => setEditing(false)}>
+            Cancel
+          </Button>
+          <Button size="sm" variant="primary" isDisabled={saving} onPress={() => void save()}>
+            {saving ? "Saving…" : "Save sign-off"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
+      {verification ? (
+        <>
+          <Chip size="sm" variant="soft" color={verification.status === "approved" ? "success" : "danger"}>
+            {STATUS_LABEL[verification.status]}
+          </Chip>
+          {stale && (
+            <Chip size="sm" variant="soft" color="warning">
+              Stale — re-review
+            </Chip>
+          )}
+          <span className="text-xs text-slate-500">
+            {verification.testedByName ? `by ${verification.testedByName} · ` : ""}
+            {formatDateTime(verification.testedAt)}
+          </span>
+          {verification.screenshots.length > 0 && (
+            <div className="flex gap-1">
+              {verification.screenshots.map((shot) => (
+                <a
+                  key={shot.id}
+                  href={assetUrl(shot.url)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block h-8 w-8 overflow-hidden rounded border border-slate-200"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={assetUrl(shot.url)} alt={shot.name} className="h-full w-full object-cover" />
+                </a>
+              ))}
+            </div>
+          )}
+          <Button size="sm" variant="tertiary" onPress={openEdit}>
+            Update
+          </Button>
+        </>
+      ) : (
+        <>
+          <span className="text-xs text-slate-400">Not reviewed</span>
+          <Button size="sm" variant="secondary" onPress={openEdit}>
+            Mark as reviewed
+          </Button>
+        </>
+      )}
     </div>
   );
 }
@@ -710,6 +916,19 @@ function FormsTab({ audit, websiteId }: { audit: SiteAudit; websiteId?: string |
   const { user } = useAuth();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [testEmail, setTestEmail] = useState("");
+  const [verifications, setVerifications] = useState<FormVerification[]>([]);
+
+  useEffect(() => {
+    if (!websiteId) return;
+    listFormVerifications(websiteId).then(setVerifications).catch(() => setVerifications([]));
+  }, [websiteId]);
+
+  const verByKey = new Map(verifications.map((verification) => [verification.formKey, verification]));
+  const upsertVerification = (verification: FormVerification) =>
+    setVerifications((current) => [
+      ...current.filter((item) => item.formKey !== verification.formKey),
+      verification,
+    ]);
   const [sending, setSending] = useState(false);
 
   const openTest = (id: string) => {
@@ -802,6 +1021,14 @@ function FormsTab({ audit, websiteId }: { audit: SiteAudit; websiteId?: string |
                       </Button>
                     )}
                   </div>
+                  {websiteId && (
+                    <FormVerificationBlock
+                      websiteId={websiteId}
+                      form={form}
+                      verification={verByKey.get(form.id)}
+                      onSaved={upsertVerification}
+                    />
+                  )}
                 </li>
               ))}
             </ul>
@@ -869,6 +1096,146 @@ function FormsTab({ audit, websiteId }: { audit: SiteAudit; websiteId?: string |
           </TableContent>
         </TableScrollContainer>
       </Table>
+    </div>
+  );
+}
+
+function FormVerificationBlock({
+  websiteId,
+  form,
+  verification,
+  onSaved,
+}: {
+  websiteId: string;
+  form: FormInventoryItem;
+  verification: FormVerification | undefined;
+  onSaved: (verification: FormVerification) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [status, setStatus] = useState<"passed" | "failed">(verification?.status ?? "passed");
+  const [note, setNote] = useState(verification?.note ?? "");
+  const [screenshots, setScreenshots] = useState<FormEvidence[]>(verification?.screenshots ?? []);
+  const [saving, setSaving] = useState(false);
+
+  const signature = formSignature(form);
+  const stale = verification
+    ? verification.formSignature !== signature ||
+      Date.now() - new Date(verification.testedAt).getTime() > 30 * 86_400_000
+    : false;
+
+  const openEdit = () => {
+    setStatus(verification?.status ?? "passed");
+    setNote(verification?.note ?? "");
+    setScreenshots(verification?.screenshots ?? []);
+    setEditing(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const saved = await saveFormVerification(websiteId, form.id, {
+        status,
+        note: note.trim(),
+        screenshots,
+        formSignature: signature,
+      });
+      onSaved(saved);
+      setEditing(false);
+      notify.success("Verification saved");
+    } catch (error) {
+      notify.error("Could not save verification", {
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="mt-3 space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+        <div className="flex gap-2">
+          {(["passed", "failed"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setStatus(value)}
+              className={`rounded-md px-3 py-1 text-xs font-semibold capitalize ${
+                status === value
+                  ? value === "passed"
+                    ? "bg-emerald-600 text-white"
+                    : "bg-rose-600 text-white"
+                  : "border border-slate-200 bg-white text-slate-600"
+              }`}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+        <textarea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          rows={2}
+          placeholder="Notes (optional) — e.g. received the test email at the expected inbox."
+          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+        />
+        <ImageUploader value={screenshots} onChange={setScreenshots} disabled={saving} />
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="tertiary" isDisabled={saving} onPress={() => setEditing(false)}>
+            Cancel
+          </Button>
+          <Button size="sm" variant="primary" isDisabled={saving} onPress={() => void save()}>
+            {saving ? "Saving…" : "Save verification"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
+      {verification ? (
+        <>
+          <Chip size="sm" variant="soft" color={verification.status === "passed" ? "success" : "danger"}>
+            <span className="capitalize">{verification.status}</span>
+          </Chip>
+          {stale && (
+            <Chip size="sm" variant="soft" color="warning">
+              Stale — re-test
+            </Chip>
+          )}
+          <span className="text-xs text-slate-500">
+            {verification.testedByName ? `by ${verification.testedByName} · ` : ""}
+            {formatDateTime(verification.testedAt)}
+          </span>
+          {verification.screenshots.length > 0 && (
+            <div className="flex gap-1">
+              {verification.screenshots.map((shot) => (
+                <a
+                  key={shot.id}
+                  href={assetUrl(shot.url)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block h-8 w-8 overflow-hidden rounded border border-slate-200"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={assetUrl(shot.url)} alt={shot.name} className="h-full w-full object-cover" />
+                </a>
+              ))}
+            </div>
+          )}
+          <Button size="sm" variant="tertiary" onPress={openEdit}>
+            Update
+          </Button>
+        </>
+      ) : (
+        <>
+          <span className="text-xs text-slate-400">Not verified</span>
+          <Button size="sm" variant="secondary" onPress={openEdit}>
+            Mark as tested
+          </Button>
+        </>
+      )}
     </div>
   );
 }
@@ -1093,7 +1460,7 @@ export function HealthDrawer({
     if (tab === "pages") return <PagesTab audit={audit} />;
     if (tab === "lighthouse") return <LighthouseTab audit={audit} />;
     if (tab === "seo") return <SeoTab audit={audit} />;
-    if (tab === "design") return <DesignTab audit={audit} />;
+    if (tab === "design") return <DesignTab audit={audit} websiteId={websiteId} />;
     if (tab === "forms") return <FormsTab audit={audit} websiteId={websiteId} />;
     return <WordPressTab audit={audit} />;
   }, [audit, tab, websiteId]);

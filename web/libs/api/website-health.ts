@@ -151,6 +151,127 @@ export async function sendFormTest(websiteId: string, formId: string, to: string
   return data.result;
 }
 
+// ---- Manual forms test verification (evidence-backed sign-off) ----
+export type FormEvidence = { id: string; url: string; name: string };
+export type FormVerification = {
+  formKey: string;
+  status: "passed" | "failed";
+  note: string;
+  screenshots: FormEvidence[];
+  formSignature: string | null;
+  testedByName: string | null;
+  testedAt: string;
+};
+
+/** Stable signature of a form's delivery config, to detect drift since verification. */
+export function formSignature(form: {
+  recipients: string[];
+  cc: string[];
+  bcc: string[];
+  fields: { name: string; required: boolean }[];
+}) {
+  const recipients = [...form.recipients, ...form.cc, ...form.bcc]
+    .map((email) => email.toLowerCase().trim())
+    .sort()
+    .join("|");
+  const fields = form.fields
+    .map((field) => `${field.name}:${field.required ? 1 : 0}`)
+    .sort()
+    .join("|");
+  const raw = `${recipients}::${fields}`;
+  let hash = 5381;
+  for (let i = 0; i < raw.length; i += 1) hash = ((hash << 5) + hash + raw.charCodeAt(i)) >>> 0;
+  return hash.toString(36);
+}
+
+export async function uploadFormEvidence(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await apiClient.post<FormEvidence>(endpoints.websiteHealth.uploads, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
+export async function listFormVerifications(websiteId: string) {
+  const { data } = await apiClient.get<{ verifications: FormVerification[] }>(
+    endpoints.websiteHealth.formVerifications(websiteId)
+  );
+  return data.verifications;
+}
+
+export async function saveFormVerification(
+  websiteId: string,
+  formKey: string,
+  payload: {
+    status: "passed" | "failed";
+    note?: string;
+    screenshots: FormEvidence[];
+    formSignature: string;
+  }
+) {
+  const { data } = await apiClient.put<{ verification: FormVerification }>(
+    endpoints.websiteHealth.formVerification(websiteId, formKey),
+    payload
+  );
+  return data.verification;
+}
+
+// ---- Manual Design QA sign-off (per page, evidence-backed) ----
+export type DesignVerification = {
+  pageKey: string;
+  status: "approved" | "rejected";
+  note: string;
+  screenshots: FormEvidence[];
+  designSignature: string | null;
+  testedByName: string | null;
+  testedAt: string;
+};
+
+/** Stable signature of a page's design QA result, to detect drift since sign-off. */
+export function designSignature(designQa: {
+  figmaMatch: number | null;
+  mobile: string;
+  tablet: string;
+  desktop: string;
+  issues: unknown[];
+}) {
+  const raw = [
+    designQa.figmaMatch ?? "na",
+    designQa.mobile,
+    designQa.tablet,
+    designQa.desktop,
+    designQa.issues.length,
+  ].join("|");
+  let hash = 5381;
+  for (let i = 0; i < raw.length; i += 1) hash = ((hash << 5) + hash + raw.charCodeAt(i)) >>> 0;
+  return hash.toString(36);
+}
+
+export async function listDesignVerifications(websiteId: string) {
+  const { data } = await apiClient.get<{ verifications: DesignVerification[] }>(
+    endpoints.websiteHealth.designVerifications(websiteId)
+  );
+  return data.verifications;
+}
+
+export async function saveDesignVerification(
+  websiteId: string,
+  pageKey: string,
+  payload: {
+    status: "approved" | "rejected";
+    note?: string;
+    screenshots: FormEvidence[];
+    designSignature: string;
+  }
+) {
+  const { data } = await apiClient.put<{ verification: DesignVerification }>(
+    endpoints.websiteHealth.designVerification(websiteId, pageKey),
+    payload
+  );
+  return data.verification;
+}
+
 export async function updateWebsiteHealthProfile(
   websiteId: string,
   profile: Omit<WebsiteHealthDetail["profile"], "sitemapUrl" | "defaultChecks">

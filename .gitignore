@@ -16,3 +16,7 @@ build/
 # Local conversation / chat exports — not part of the project
 docs/conversation-export/
 docs/conversation-export.zip
+
+# Runtime-generated file artifacts (uploaded evidence, scan screenshots)
+api/public/uploads/
+api/public/health-scans/

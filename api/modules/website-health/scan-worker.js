@@ -10,6 +10,7 @@ var review = require('./review.service');
 var connector = require('../connectors/wordpress.service');
 var siteChecks = require('./site-checks.service');
 var health = require('./website-health.service');
+var notifications = require('../notifications/notifications.service');
 
 var QUEUE = 'website-health:scan-queue';
 var started = false;
@@ -299,20 +300,34 @@ async function processScan(scanId) {
     var wpSnapshot = null;
     if (wantChecklists) {
       await update(scanId, 'wordpress', 90);
-      wpSnapshot = await connector.refreshSnapshot(website.id);
-      var wpFindings = wordpressFindings(wpSnapshot, essentialPlugins, stalenessDays);
-      await insertFindings(scanId, null, wpFindings);
-      allFindings.push.apply(allFindings, wpFindings);
+      try {
+        wpSnapshot = await connector.refreshSnapshot(website.id);
+        var wpFindings = wordpressFindings(wpSnapshot, essentialPlugins, stalenessDays);
+        await insertFindings(scanId, null, wpFindings);
+        allFindings.push.apply(allFindings, wpFindings);
+      } catch (connectorErr) {
+        // No paired connector (or it failed): skip the WordPress checks gracefully
+        // rather than failing the whole scan, and surface why.
+        var checklistSkip = [{ category: 'wordpress', checkId: 'wordpress.not-connected', severity: 'info', viewport: 'all', title: 'Website checklists skipped', detail: 'The WordPress checklist checks need the AHM Core connector, which is not connected for this site.', evidence: String(connectorErr.message || connectorErr).slice(0, 300), recommendation: 'Connect AHM Core to this website to run maintenance/security checklists.', confidence: 'high' }];
+        await insertFindings(scanId, null, checklistSkip);
+        allFindings.push.apply(allFindings, checklistSkip);
+      }
     }
     // Forms audit: enumerate CF7 / WPForms / Elementor forms via the connector
     // (recipients, cc/bcc, fields) and flag configuration problems. Connector-gated.
     var formsInventory = null;
     if (checks.indexOf('forms') !== -1) {
       await update(scanId, 'forms', 95);
-      var formsData = await connector.fetchForms(website.id);
-      formsInventory = formsData && Array.isArray(formsData.forms) ? formsData.forms : [];
-      var detectedForms = browserPages.reduce(function(sum, page) { return sum + ((page.core && page.core.forms) || []).length; }, 0);
-      var formFindings = formsFindings(formsInventory, detectedForms);
+      var formFindings;
+      try {
+        var formsData = await connector.fetchForms(website.id);
+        formsInventory = formsData && Array.isArray(formsData.forms) ? formsData.forms : [];
+        var detectedForms = browserPages.reduce(function(sum, page) { return sum + ((page.core && page.core.forms) || []).length; }, 0);
+        formFindings = formsFindings(formsInventory, detectedForms);
+      } catch (connectorErr) {
+        formsInventory = [];
+        formFindings = [{ category: 'forms', checkId: 'forms.not-connected', severity: 'info', viewport: 'all', title: 'Form config audit skipped', detail: 'Reading form recipients/fields needs the AHM Core connector, which is not connected for this site. Detected forms on the crawled pages are still shown.', evidence: String(connectorErr.message || connectorErr).slice(0, 300), recommendation: 'Connect AHM Core to audit form recipients and delivery config.', confidence: 'high' }];
+      }
       await insertFindings(scanId, null, formFindings);
       allFindings.push.apply(allFindings, formFindings);
     }
@@ -339,9 +354,26 @@ async function processScan(scanId) {
       { id: scanId, status: partial ? 'partial' : 'completed', summary: JSON.stringify(scanSummary), result: JSON.stringify(audit) }
     );
     await emit(events.HEALTH_SCAN_COMPLETED, scanId, { websiteId: String(website.id), status: partial ? 'partial' : 'completed', progress: 100, summary: scanSummary });
+    if (scan.requested_by) {
+      var critical = (scanSummary && scanSummary.criticalIssues) || 0;
+      notifications.dispatch(notifications.CATEGORY.HEALTH, {
+        userId: scan.requested_by, audienceType: 'user', type: 'scan_completed',
+        title: critical > 0 ? 'Scan finished — ' + critical + ' critical issue(s)' : 'Website scan finished',
+        message: (website.name || website.url) + ' scored ' + (scanSummary && scanSummary.overall != null ? scanSummary.overall : '—') + '/100',
+        actionUrl: '/dashboard/website-health', metadata: { scanId: String(scanId), websiteId: String(website.id) },
+      }, null, null).catch(function() {});
+    }
   } catch (err) {
     await db.query("UPDATE website_health_scans SET status = 'failed', stage = 'failed', error_message = :error, completed_at = UTC_TIMESTAMP() WHERE id = :id AND status <> 'cancelled'", { id: scanId, error: String(err.message || err).slice(0, 4000) });
     await emit(events.HEALTH_SCAN_FAILED, scanId, { websiteId: String(website.id), error: err.message || 'Scan failed.' });
+    if (scan.requested_by) {
+      notifications.dispatch(notifications.CATEGORY.HEALTH, {
+        userId: scan.requested_by, audienceType: 'user', type: 'scan_failed',
+        title: 'Website scan failed',
+        message: (website.name || website.url) + ' — ' + String(err.message || err).slice(0, 140),
+        actionUrl: '/dashboard/website-health', metadata: { scanId: String(scanId), websiteId: String(website.id) },
+      }, null, null).catch(function() {});
+    }
   }
 }
 

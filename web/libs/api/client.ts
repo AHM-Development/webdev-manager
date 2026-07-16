@@ -15,3 +15,16 @@ export const apiClient = axios.create({
 });
 
 attachInterceptors(apiClient);
+
+/**
+ * Resolve a server asset path (e.g. "/uploads/form-evidence/x.png", served
+ * statically at the API origin) into an absolute URL. Strips the "/api/vN"
+ * suffix from the API base to get the origin.
+ */
+export function assetUrl(path: string) {
+  if (!path) return path;
+  if (/^https?:\/\//.test(path)) return path;
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const origin = base.replace(/\/api\/v\d+\/?$/, "").replace(/\/$/, "");
+  return `${origin}${path.startsWith("/") ? "" : "/"}${path}`;
+}

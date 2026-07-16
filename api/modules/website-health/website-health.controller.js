@@ -2,6 +2,7 @@ var service = require('./website-health.service');
 var worker = require('./scan-worker');
 var checklists = require('./checklist.service');
 var wpConnector = require('../connectors/wordpress.service');
+var uploads = require('../../lib/uploads');
 
 function context(req) { return { ip: req.context && req.context.ip, userAgent: req.context && req.context.userAgent }; }
 
@@ -41,4 +42,42 @@ async function sendFormTest(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { list: list, latest: latest, history: history, createScan: createScan, capabilities: capabilities, getScan: getScan, cancel: cancel, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, checklistList: checklistList, checklistGet: checklistGet, report: report, sendFormTest: sendFormTest };
+async function uploadEvidence(req, res, next) {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: { code: 'NO_FILE', message: 'No image was uploaded.' } });
+      return;
+    }
+    res.status(201).json({ id: req.file.filename, url: uploads.formEvidenceUrl(req.file.filename), name: req.file.originalname });
+  } catch (err) { next(err); }
+}
+
+async function listFormVerifications(req, res, next) {
+  try { res.json({ verifications: await service.listFormVerifications(req.params.websiteId) }); } catch (err) { next(err); }
+}
+
+async function saveFormVerification(req, res, next) {
+  try {
+    res.json({ verification: await service.saveFormVerification(req.params.websiteId, req.params.formKey, req.body || {}, req.user) });
+  } catch (err) { next(err); }
+}
+
+async function deleteFormVerification(req, res, next) {
+  try { res.json(await service.deleteFormVerification(req.params.websiteId, req.params.formKey)); } catch (err) { next(err); }
+}
+
+async function listDesignVerifications(req, res, next) {
+  try { res.json({ verifications: await service.listDesignVerifications(req.params.websiteId) }); } catch (err) { next(err); }
+}
+
+async function saveDesignVerification(req, res, next) {
+  try {
+    res.json({ verification: await service.saveDesignVerification(req.params.websiteId, req.params.pageKey, req.body || {}, req.user) });
+  } catch (err) { next(err); }
+}
+
+async function deleteDesignVerification(req, res, next) {
+  try { res.json(await service.deleteDesignVerification(req.params.websiteId, req.params.pageKey)); } catch (err) { next(err); }
+}
+
+module.exports = { list: list, latest: latest, history: history, createScan: createScan, capabilities: capabilities, getScan: getScan, cancel: cancel, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, checklistList: checklistList, checklistGet: checklistGet, report: report, sendFormTest: sendFormTest, uploadEvidence: uploadEvidence, listFormVerifications: listFormVerifications, saveFormVerification: saveFormVerification, deleteFormVerification: deleteFormVerification, listDesignVerifications: listDesignVerifications, saveDesignVerification: saveDesignVerification, deleteDesignVerification: deleteDesignVerification };

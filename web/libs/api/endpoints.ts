@@ -6,7 +6,6 @@ export const endpoints = {
     logout: "/auth/logout",
     logoutAll: "/auth/logout-all",
     me: "/auth/me",
-    forgotPassword: "/auth/forgot-password",
     resetPassword: "/auth/reset-password",
   },
   projects: {
@@ -30,6 +29,7 @@ export const endpoints = {
     revokeInvite: (inviteId: string) => `/users/invites/${inviteId}`,
     update: (userId: string) => `/users/${userId}`,
     delete: (userId: string) => `/users/${userId}`,
+    resetLink: (userId: string) => `/users/${userId}/reset-link`,
   },
   invites: {
     detail: (token: string) => `/invites/${token}`,
@@ -56,6 +56,7 @@ export const endpoints = {
   notifications: {
     list: "/notifications",
     unreadCount: "/notifications/unread-count",
+    readAll: "/notifications/read-all",
     markRead: (notificationId: string) => `/notifications/${notificationId}/read`,
     settings: "/notifications/settings",
     test: "/notifications/test",
@@ -130,6 +131,15 @@ export const endpoints = {
     report: (scanId: string) => `/website-health/scans/${scanId}/report`,
     finding: (findingId: string) => `/website-health/findings/${findingId}`,
     checklists: "/website-health/checklists",
+    uploads: "/website-health/uploads",
+    formVerifications: (websiteId: string) =>
+      `/website-health/websites/${websiteId}/form-verifications`,
+    formVerification: (websiteId: string, formKey: string) =>
+      `/website-health/websites/${websiteId}/form-verifications/${encodeURIComponent(formKey)}`,
+    designVerifications: (websiteId: string) =>
+      `/website-health/websites/${websiteId}/design-verifications`,
+    designVerification: (websiteId: string, pageKey: string) =>
+      `/website-health/websites/${websiteId}/design-verifications/${encodeURIComponent(pageKey)}`,
   },
   wordpressConnector: {
     detail: (websiteId: string) => `/connectors/wordpress/${websiteId}`,

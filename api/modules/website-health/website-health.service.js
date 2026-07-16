@@ -306,4 +306,136 @@ async function report(scanId) {
   return { generatedAt: new Date().toISOString(), scan: mapScan(scan), audit: parseJson(scan.site_result, null), pages: await pages(scanId) };
 }
 
-module.exports = { list: list, getLatest: getLatest, history: history, createScan: createScan, getScan: getScan, cancel: cancel, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, report: report, websiteRow: websiteRow, parseJson: parseJson, capabilities: capabilities, DEFAULT_ESSENTIAL_PLUGINS: DEFAULT_ESSENTIAL_PLUGINS, DEFAULT_CONTENT_STALENESS_DAYS: DEFAULT_CONTENT_STALENESS_DAYS };
+// ---------- manual forms test verification (evidence-backed sign-off) ----------
+function mapVerification(row) {
+  return {
+    formKey: row.form_key,
+    status: row.status,
+    note: row.note || '',
+    screenshots: parseJson(row.screenshots, []),
+    formSignature: row.form_signature || null,
+    testedByName: row.tested_by_name || null,
+    testedAt: row.tested_at,
+  };
+}
+
+async function listFormVerifications(websiteId) {
+  await websiteRow(websiteId);
+  var rows = await db.query(
+    'SELECT * FROM website_form_verifications WHERE website_id = :websiteId',
+    { websiteId: websiteId }
+  );
+  return rows.map(mapVerification);
+}
+
+async function saveFormVerification(websiteId, formKey, input, user) {
+  await websiteRow(websiteId);
+  var key = String(formKey || '').slice(0, 191);
+  if (!key) fail(400, 'VALIDATION_ERROR', 'A form key is required.');
+  var status = ['passed', 'failed'].indexOf(input.status) !== -1 ? input.status : null;
+  if (!status) fail(400, 'VALIDATION_ERROR', 'Status must be "passed" or "failed".');
+  var screenshots = Array.isArray(input.screenshots) ? input.screenshots.slice(0, 12) : [];
+
+  await db.query(
+    `INSERT INTO website_form_verifications
+       (website_id, form_key, status, note, screenshots, form_signature, tested_by, tested_by_name, tested_at)
+     VALUES
+       (:websiteId, :formKey, :status, :note, :screenshots, :signature, :userId, :userName, UTC_TIMESTAMP())
+     ON DUPLICATE KEY UPDATE
+       status = VALUES(status), note = VALUES(note), screenshots = VALUES(screenshots),
+       form_signature = VALUES(form_signature), tested_by = VALUES(tested_by),
+       tested_by_name = VALUES(tested_by_name), tested_at = UTC_TIMESTAMP()`,
+    {
+      websiteId: websiteId,
+      formKey: key,
+      status: status,
+      note: input.note != null ? String(input.note).slice(0, 2000) : null,
+      screenshots: JSON.stringify(screenshots),
+      signature: input.formSignature ? String(input.formSignature).slice(0, 64) : null,
+      userId: user.id,
+      userName: user.name,
+    }
+  );
+
+  var rows = await db.query(
+    'SELECT * FROM website_form_verifications WHERE website_id = :websiteId AND form_key = :formKey LIMIT 1',
+    { websiteId: websiteId, formKey: key }
+  );
+  return mapVerification(rows[0]);
+}
+
+async function deleteFormVerification(websiteId, formKey) {
+  await db.query(
+    'DELETE FROM website_form_verifications WHERE website_id = :websiteId AND form_key = :formKey',
+    { websiteId: websiteId, formKey: String(formKey || '') }
+  );
+  return { deleted: true };
+}
+
+// ---------- manual Design QA sign-off (per page, evidence-backed) ----------
+function mapDesignVerification(row) {
+  return {
+    pageKey: row.page_key,
+    status: row.status,
+    note: row.note || '',
+    screenshots: parseJson(row.screenshots, []),
+    designSignature: row.design_signature || null,
+    testedByName: row.tested_by_name || null,
+    testedAt: row.tested_at,
+  };
+}
+
+async function listDesignVerifications(websiteId) {
+  await websiteRow(websiteId);
+  var rows = await db.query(
+    'SELECT * FROM website_design_verifications WHERE website_id = :websiteId',
+    { websiteId: websiteId }
+  );
+  return rows.map(mapDesignVerification);
+}
+
+async function saveDesignVerification(websiteId, pageKey, input, user) {
+  await websiteRow(websiteId);
+  var key = String(pageKey || '').slice(0, 191);
+  if (!key) fail(400, 'VALIDATION_ERROR', 'A page key is required.');
+  var status = ['approved', 'rejected'].indexOf(input.status) !== -1 ? input.status : null;
+  if (!status) fail(400, 'VALIDATION_ERROR', 'Status must be "approved" or "rejected".');
+  var screenshots = Array.isArray(input.screenshots) ? input.screenshots.slice(0, 12) : [];
+
+  await db.query(
+    `INSERT INTO website_design_verifications
+       (website_id, page_key, status, note, screenshots, design_signature, tested_by, tested_by_name, tested_at)
+     VALUES
+       (:websiteId, :pageKey, :status, :note, :screenshots, :signature, :userId, :userName, UTC_TIMESTAMP())
+     ON DUPLICATE KEY UPDATE
+       status = VALUES(status), note = VALUES(note), screenshots = VALUES(screenshots),
+       design_signature = VALUES(design_signature), tested_by = VALUES(tested_by),
+       tested_by_name = VALUES(tested_by_name), tested_at = UTC_TIMESTAMP()`,
+    {
+      websiteId: websiteId,
+      pageKey: key,
+      status: status,
+      note: input.note != null ? String(input.note).slice(0, 2000) : null,
+      screenshots: JSON.stringify(screenshots),
+      signature: input.designSignature ? String(input.designSignature).slice(0, 64) : null,
+      userId: user.id,
+      userName: user.name,
+    }
+  );
+
+  var rows = await db.query(
+    'SELECT * FROM website_design_verifications WHERE website_id = :websiteId AND page_key = :pageKey LIMIT 1',
+    { websiteId: websiteId, pageKey: key }
+  );
+  return mapDesignVerification(rows[0]);
+}
+
+async function deleteDesignVerification(websiteId, pageKey) {
+  await db.query(
+    'DELETE FROM website_design_verifications WHERE website_id = :websiteId AND page_key = :pageKey',
+    { websiteId: websiteId, pageKey: String(pageKey || '') }
+  );
+  return { deleted: true };
+}
+
+module.exports = { list: list, getLatest: getLatest, history: history, createScan: createScan, getScan: getScan, cancel: cancel, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, report: report, websiteRow: websiteRow, parseJson: parseJson, capabilities: capabilities, listFormVerifications: listFormVerifications, saveFormVerification: saveFormVerification, deleteFormVerification: deleteFormVerification, listDesignVerifications: listDesignVerifications, saveDesignVerification: saveDesignVerification, deleteDesignVerification: deleteDesignVerification, DEFAULT_ESSENTIAL_PLUGINS: DEFAULT_ESSENTIAL_PLUGINS, DEFAULT_CONTENT_STALENESS_DAYS: DEFAULT_CONTENT_STALENESS_DAYS };

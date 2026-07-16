@@ -2,6 +2,10 @@
 
 import {
   Button,
+  ComboBox,
+  ComboBoxInputGroup,
+  ComboBoxPopover,
+  ComboBoxTrigger,
   Input,
   Label,
   ListBox,
@@ -14,11 +18,6 @@ import {
   ModalFooter,
   ModalHeader,
   ModalHeading,
-  Select,
-  SelectIndicator,
-  SelectPopover,
-  SelectTrigger,
-  SelectValue,
   TextField,
   type useOverlayState,
 } from "@heroui/react";
@@ -105,11 +104,15 @@ export function StartHealthScanModal({
       lighthouse: !!capabilities?.lighthouse,
       technical_seo: !!capabilities?.ai,
       design_qa: !!capabilities?.ai,
-      website_checklists: selected?.connector.status === "connected",
-      forms: selected?.connector.status === "connected",
+      // Selectable regardless of connector: without AHM Core the scan runs the
+      // check but reports it was skipped, instead of blocking selection.
+      website_checklists: true,
+      forms: true,
     }),
-    [capabilities, selected]
+    [capabilities]
   );
+
+  const connectorConnected = selected?.connector.status === "connected";
 
   // Reset the chosen website whenever the modal opens (supports per-row prefill).
   useEffect(() => {
@@ -185,22 +188,25 @@ export function StartHealthScanModal({
                   render={({ field, fieldState }) => (
                     <div>
                       <label className="mb-1 block text-sm font-medium">Website</label>
-                      <Select
+                      <ComboBox
                         aria-label="Website to scan"
                         isDisabled={lockWebsite}
+                        menuTrigger="focus"
                         selectedKey={field.value || null}
-                        onSelectionChange={(key) => field.onChange(String(key))}
+                        onSelectionChange={(key) => field.onChange(key ? String(key) : "")}
                       >
-                        <SelectTrigger className="w-full">
-                          <SelectValue>
-                            {selected ? `${selected.projectName} - ${selected.name}` : "Select website"}
-                          </SelectValue>
-                          <SelectIndicator />
-                        </SelectTrigger>
-                        <SelectPopover>
+                        <ComboBoxInputGroup className="w-full">
+                          <Input placeholder="Search websites…" />
+                          <ComboBoxTrigger />
+                        </ComboBoxInputGroup>
+                        <ComboBoxPopover>
                           <ListBox>
                             {websites.map((website) => (
-                              <ListBoxItem key={website.id} id={website.id} textValue={`${website.projectName} ${website.name}`}>
+                              <ListBoxItem
+                                key={website.id}
+                                id={website.id}
+                                textValue={`${website.projectName} - ${website.name}`}
+                              >
                                 <div>
                                   <p className="font-medium">{website.projectName}</p>
                                   <p className="text-xs text-slate-500">{website.name} - {website.url}</p>
@@ -208,8 +214,8 @@ export function StartHealthScanModal({
                               </ListBoxItem>
                             ))}
                           </ListBox>
-                        </SelectPopover>
-                      </Select>
+                        </ComboBoxPopover>
+                      </ComboBox>
                       {fieldState.error && <p className="mt-1 text-sm text-red-600">{fieldState.error.message}</p>}
                     </div>
                   )}
@@ -263,6 +269,14 @@ export function StartHealthScanModal({
                             {available && CHECK_DESCRIPTIONS[key] && (
                               <span className="block text-xs text-slate-500">{CHECK_DESCRIPTIONS[key]}</span>
                             )}
+                            {available &&
+                              (key === "website_checklists" || key === "forms") &&
+                              selected &&
+                              !connectorConnected && (
+                                <span className="block text-xs text-amber-600">
+                                  Needs AHM Core connected for full results — otherwise it&apos;s reported as skipped.
+                                </span>
+                              )}
                             {!available && (
                               <span className="block text-xs text-slate-400">{CHECK_HINTS[key]}</span>
                             )}

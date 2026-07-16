@@ -70,14 +70,32 @@ function matrixToSheet(matrix) {
 }
 
 function guessMapping(headers) {
-  function find(patterns) {
+  // First header (in column order) matching ANY pattern, skipping any header
+  // that matches an `exclude` pattern. Column order breaks ties.
+  function find(patterns, exclude) {
     return headers.find(function(header) {
       var lower = header.toLowerCase();
+      if (exclude && exclude.some(function(p) { return p.test(lower); })) return false;
       return patterns.some(function(pattern) {
         return pattern.test(lower);
       });
     }) || '';
   }
+
+  // Ranked variant: try pattern groups in priority order and return the first
+  // header the highest-priority group matches. Lets a specific column ("Main
+  // Domain") win over a generic one ("Domain Management") regardless of order.
+  function findRanked(groups, exclude) {
+    for (var i = 0; i < groups.length; i += 1) {
+      var hit = find(groups[i], exclude);
+      if (hit) return hit;
+    }
+    return '';
+  }
+
+  // URL-ish columns that are NOT the site's own address (registrar/config,
+  // design links, media, backups) — never guess these as the website URL.
+  var NOT_A_SITE_URL = [/management/, /registrar/, /\bdns\b/, /figma/, /video/, /backup/];
 
   return {
     clientName: find([/client/, /project/, /name/]),
@@ -86,10 +104,21 @@ function guessMapping(headers) {
     status: find([/status/, /stage/]),
     priority: find([/priority/]),
     websiteName: find([/website.*name/, /site.*name/]),
-    websiteUrl: find([/website/, /domain/, /url/, /link/, /live/]),
+    websiteUrl: findRanked(
+      [
+        // 1. Unambiguous live/main site address.
+        [/main\s*domain/, /live.*(url|site|website|link|domain)/, /website.*url/, /site.*url/],
+        // 2. Generic website/domain/url columns (management/registrar excluded).
+        [/website/, /domain/, /url/],
+        // 3. Last resort: a staging or generic link/live column.
+        [/link/, /live/],
+      ],
+      NOT_A_SITE_URL
+    ),
     figmaLink: find([/figma/]),
-    domainManagement: find([/domain.*management/, /registrar/, /dns/]),
-    serverLocation: find([/server/, /hosting/, /host/]),
+    domainManagement: find([/domain.*management/, /registrar/, /\bdns\b/]),
+    // A server *location*, not a backup/migration flag.
+    serverLocation: find([/server/, /hosting/, /host/], [/backup/, /migrat/]),
   };
 }
 

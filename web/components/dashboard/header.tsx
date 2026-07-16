@@ -1,9 +1,10 @@
 "use client";
 
-import { Bell, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthContext } from "@/libs/auth/auth-context";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 const pageMeta = [
   { href: "/dashboard/projects", title: "Projects", eyebrow: "Client delivery" },
@@ -88,13 +89,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-950"
-        >
-          <Bell className="h-4 w-4" />
-        </button>
+        <NotificationBell />
         <button
           type="button"
           aria-label="Sign out"

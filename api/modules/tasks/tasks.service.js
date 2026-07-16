@@ -1,5 +1,6 @@
 var db = require('../../db/pool');
 var activity = require('../auth/activity.service');
+var notifications = require('../notifications/notifications.service');
 
 var STATUSES = ['Backlog', 'In Progress', 'Review', 'Blocked', 'Done'];
 var PRIORITIES = ['Low', 'Medium', 'High'];
@@ -280,6 +281,29 @@ async function applyTaskLinkFields(taskId, input) {
   await db.query('UPDATE tasks SET ' + sets.join(', ') + ' WHERE id = :taskId AND deleted_at IS NULL', params);
 }
 
+// Best-effort notifications for task assignment / review. Never blocks or throws
+// into the caller; skips notifying the actor about their own change.
+function notifyAssignee(task, actor, context, prevAssigneeId) {
+  if (task.assigneeUserId && String(task.assigneeUserId) !== String(actor.id) &&
+      String(task.assigneeUserId) !== String(prevAssigneeId || '')) {
+    notifications.dispatch(notifications.CATEGORY.TASK_ASSIGNMENT, {
+      userId: task.assigneeUserId, audienceType: 'user', type: 'task_assigned',
+      title: 'New task assigned to you', message: task.title,
+      actionUrl: '/dashboard/tasks', metadata: { taskId: task.id, projectId: task.projectId },
+    }, actor, context).catch(function() {});
+  }
+}
+function notifyReviewer(task, actor, context, prevReviewerId) {
+  if (task.reviewerUserId && String(task.reviewerUserId) !== String(actor.id) &&
+      String(task.reviewerUserId) !== String(prevReviewerId || '')) {
+    notifications.dispatch(notifications.CATEGORY.REVIEW, {
+      userId: task.reviewerUserId, audienceType: 'user', type: 'task_review',
+      title: 'You were added as reviewer', message: task.title,
+      actionUrl: '/dashboard/tasks', metadata: { taskId: task.id, projectId: task.projectId },
+    }, actor, context).catch(function() {});
+  }
+}
+
 async function createTask(input, user, context) {
   var payload = await normalizePayload(input || {}, false);
   var sortOrder = await nextSortOrder(payload.projectId);
@@ -317,11 +341,13 @@ async function createTask(input, user, context) {
   );
   var task = await getTask(result.insertId);
   await logTaskActivity(user, context, 'tasks.create', task);
+  notifyAssignee(task, user, context, null);
+  notifyReviewer(task, user, context, null);
   return task;
 }
 
 async function updateTask(taskId, input, user, context) {
-  await getTask(taskId);
+  var before = await getTask(taskId);
   var payload = await normalizePayload(input || {}, false);
   await db.query(
     `UPDATE tasks
@@ -357,6 +383,8 @@ async function updateTask(taskId, input, user, context) {
   await applyTaskLinkFields(taskId, input || {});
   var task = await getTask(taskId);
   await logTaskActivity(user, context, 'tasks.update', task);
+  notifyAssignee(task, user, context, before.assigneeUserId);
+  notifyReviewer(task, user, context, before.reviewerUserId);
   return task;
 }
 
@@ -372,6 +400,14 @@ async function updateStatus(taskId, status, user, context) {
   );
   var task = await getTask(taskId);
   await logTaskActivity(user, context, 'tasks.status_update', task);
+  // Moving to Review pings the reviewer that it's ready for them.
+  if (normalized === 'Review' && task.reviewerUserId && String(task.reviewerUserId) !== String(user.id)) {
+    notifications.dispatch(notifications.CATEGORY.REVIEW, {
+      userId: task.reviewerUserId, audienceType: 'user', type: 'task_review_ready',
+      title: 'A task is ready for your review', message: task.title,
+      actionUrl: '/dashboard/tasks', metadata: { taskId: task.id, projectId: task.projectId },
+    }, user, context).catch(function() {});
+  }
   return task;
 }
 

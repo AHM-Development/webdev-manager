@@ -1,6 +1,37 @@
 var db = require('../../db/pool');
 var tasks = require('../tasks/tasks.service');
 var websiteActivity = require('../activity-logs/activity-logs.service');
+var notifications = require('../notifications/notifications.service');
+
+// Best-effort notifications for stage owner/reviewer assignment + blocked stages.
+function notifyStageChanges(row, input, actor, context) {
+  var meta = { stageId: String(row.id), projectId: String(row.project_id) };
+  var url = '/dashboard/client-logs';
+  if (input.ownerUserId && String(input.ownerUserId) !== String(row.owner_user_id || '') && String(input.ownerUserId) !== String(actor.id)) {
+    notifications.dispatch(notifications.CATEGORY.TASK_ASSIGNMENT, {
+      userId: input.ownerUserId, audienceType: 'user', type: 'stage_assigned',
+      title: 'You are now the owner of a stage', message: row.name, actionUrl: url, metadata: meta,
+    }, actor, context).catch(function() {});
+  }
+  if (input.reviewerUserId && String(input.reviewerUserId) !== String(row.reviewer_user_id || '') && String(input.reviewerUserId) !== String(actor.id)) {
+    notifications.dispatch(notifications.CATEGORY.REVIEW, {
+      userId: input.reviewerUserId, audienceType: 'user', type: 'stage_review',
+      title: 'You are the reviewer on a stage', message: row.name, actionUrl: url, metadata: meta,
+    }, actor, context).catch(function() {});
+  }
+  if (input.status === 'blocked' && row.status !== 'blocked') {
+    if (row.owner_user_id && String(row.owner_user_id) !== String(actor.id)) {
+      notifications.dispatch(notifications.CATEGORY.CLIENT_LOGS, {
+        userId: row.owner_user_id, audienceType: 'user', type: 'stage_blocked',
+        title: 'A stage you own is blocked', message: row.name, actionUrl: url, metadata: meta,
+      }, actor, context).catch(function() {});
+    }
+    notifications.dispatch(notifications.CATEGORY.CLIENT_LOGS, {
+      audienceType: 'role', audienceValue: 'web_dev_manager', type: 'stage_blocked',
+      title: 'A client stage is blocked', message: row.name, actionUrl: url, metadata: meta,
+    }, actor, context).catch(function() {});
+  }
+}
 
 /**
  * Mirror a Client Logs action into the project-keyed website_activity_logs feed
@@ -491,6 +522,7 @@ async function updateStage(stageId, input, user) {
   await mirrorActivity(row.project_id, null, user, 'client_log.stage_updated',
     'Updated stage "' + row.name + '" (' + changes.map(function(c) { return c.field; }).join(', ') + ')', severity,
     { stageId: String(stageId), fields: changes.map(function(c) { return c.field; }), status: input.status || null });
+  notifyStageChanges(row, input, user, null);
   return getStage(stageId);
 }
 
@@ -759,6 +791,14 @@ async function importMeeting(payload, user) {
   await mirrorActivity(projectId, project.client_name, user, 'client_log.meeting_imported',
     'Imported meeting "' + String(meeting.title || 'Meeting') + '" with ' + actions.length + ' proposed action(s)', 'info',
     { meetingId: String(meetingId), actionCount: actions.length });
+  if (actions.length) {
+    notifications.dispatch(notifications.CATEGORY.CLIENT_LOGS, {
+      audienceType: 'role', audienceValue: 'web_dev_manager', type: 'meeting_actions',
+      title: 'Meeting actions need review',
+      message: actions.length + ' action(s) from "' + String(meeting.title || 'Meeting') + '" await confirmation',
+      actionUrl: '/dashboard/client-logs', metadata: { meetingId: String(meetingId), projectId: String(projectId) },
+    }, user, null).catch(function() {});
+  }
   return getMeeting(meetingId);
 }
 

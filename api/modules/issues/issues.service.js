@@ -1,5 +1,6 @@
 var db = require('../../db/pool');
 var activity = require('../auth/activity.service');
+var notifications = require('../notifications/notifications.service');
 
 var ISSUE_STATUSES = ['Open', 'In Progress', 'Fixed'];
 var TARGET_TYPES = ['task', 'checklist'];
@@ -380,6 +381,17 @@ async function updateStatus(issueId, status, user, context) {
   );
   issue = await getIssue(issueId);
   await logIssueActivity(user, context, 'issues.status_update', issue, { status: normalized });
+  if (normalized === 'Fixed') {
+    var creatorRows = await db.query('SELECT created_by, title FROM issues WHERE id = :id LIMIT 1', { id: issueId });
+    var creator = creatorRows[0];
+    if (creator && creator.created_by && String(creator.created_by) !== String(user.id)) {
+      notifications.dispatch(notifications.CATEGORY.ISSUES, {
+        userId: creator.created_by, audienceType: 'user', type: 'issue_fixed',
+        title: 'An issue you raised was marked fixed', message: creator.title || 'Issue',
+        actionUrl: '/dashboard/issue-boards', metadata: { issueId: String(issueId) },
+      }, user, context).catch(function() {});
+    }
+  }
   return issue;
 }
 
@@ -468,6 +480,14 @@ async function addApplications(issueId, input, user, context) {
 
   issue = await getIssue(issueId);
   await logIssueActivity(user, context, 'issues.apply', issue, { count: created });
+  if (created > 0) {
+    notifications.dispatch(notifications.CATEGORY.ISSUES, {
+      audienceType: 'role', audienceValue: 'web_dev_manager', type: 'issue_applied',
+      title: 'Issue applied to a client',
+      message: (issue && issue.title) || 'Issue',
+      actionUrl: '/dashboard/issue-boards', metadata: { issueId: String(issueId) },
+    }, user, context).catch(function() {});
+  }
   return issue;
 }
 

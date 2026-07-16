@@ -7,6 +7,10 @@ export type NotificationChannel = "off" | "email" | "discord" | "both";
 
 export type NotificationSettings = {
   taskAssignments: NotificationChannel;
+  reviews: NotificationChannel;
+  clientLogs: NotificationChannel;
+  issues: NotificationChannel;
+  security: NotificationChannel;
   healthAlerts: NotificationChannel;
   passwordAgeAlerts: NotificationChannel;
   dailyUserSummary: NotificationChannel;
@@ -58,10 +62,29 @@ export async function markNotificationRead(notificationId: string) {
   return data.notification;
 }
 
+export async function markAllNotificationsRead() {
+  const { data } = await apiClient.patch<{ updated: number }>(endpoints.notifications.readAll);
+  return data.updated;
+}
+
 export async function testNotification(channel: NotificationChannel = "off") {
   const { data } = await apiClient.post<{ notification: RealtimeNotification }>(
     endpoints.notifications.test,
     { channel }
   );
   return data.notification;
+}
+
+export type DiscordTestResult = {
+  ok: boolean;
+  delivered: boolean;
+  reason?: string;
+  message: string;
+};
+
+export async function testDiscordWebhook() {
+  const { data } = await apiClient.post<DiscordTestResult>(
+    endpoints.notifications.discordTest
+  );
+  return data;
 }

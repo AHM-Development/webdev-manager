@@ -12,6 +12,7 @@ router.use(limits.apiUserRateLimit);
 
 router.get('/', controller.list);
 router.get('/unread-count', controller.unreadCount);
+router.patch('/read-all', controller.markAllRead);
 router.patch('/:notificationId/read', controller.markRead);
 
 router.get('/settings', auth.requireRoles([roles.ROLES.SUPERADMIN]), controller.getSettings);

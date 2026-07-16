@@ -10,6 +10,7 @@ var http = require('http');
 var schema = require('../db/schema');
 var realtime = require('../realtime/socket');
 var healthWorker = require('../modules/website-health/scan-worker');
+var digestScheduler = require('../modules/notifications/notification-scheduler');
 
 /**
  * Get port from environment and store in Express.
@@ -35,6 +36,7 @@ async function start() {
   try {
     await schema.ensureSchema();
     await healthWorker.start();
+    digestScheduler.start();
     server.listen(port);
     server.on('error', onError);
     server.on('listening', onListening);

@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  Bell,
   Bug,
   ClipboardList,
   FolderKanban,
@@ -20,6 +21,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useAuthContext } from "@/libs/auth/auth-context";
+import { useNotifications } from "@/components/notifications/notifications-provider";
 import type { ApiUser } from "@/libs/api/users";
 
 type Role = ApiUser["role"];
@@ -40,6 +42,7 @@ const navGroups: {
   {
     label: "Work",
     items: [
+      { label: "Notifications", href: "/dashboard/notifications", icon: Bell },
       { label: "My Tasks", href: "/dashboard/my-tasks", icon: ClipboardList },
       { label: "My Notes", href: "/dashboard/my-notes", icon: StickyNote },
       { label: "Tasks", href: "/dashboard/tasks", icon: ListChecks },
@@ -62,6 +65,7 @@ const navGroups: {
 export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuthContext();
+  const { unreadCount } = useNotifications();
 
   return (
     <aside className="hidden w-[270px] shrink-0 bg-white text-slate-950 ring-1 ring-slate-200/60 lg:flex lg:flex-col">
@@ -115,6 +119,15 @@ export function Sidebar() {
                       }`}
                     />
                     <span>{item.label}</span>
+                    {item.href === "/dashboard/notifications" && unreadCount > 0 && (
+                      <span
+                        className={`ml-auto grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${
+                          isActive ? "bg-white/25 text-white" : "bg-rose-500 text-white"
+                        }`}
+                      >
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

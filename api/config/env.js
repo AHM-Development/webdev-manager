@@ -59,6 +59,8 @@ module.exports = {
   nodeEnv: nodeEnv,
   port: process.env.PORT || '4000',
   clientUrl: process.env.CLIENT_URL || 'http://localhost',
+  // Wall-clock timezone for scheduled digests (daily summary / pre-shift / weekly).
+  timezone: process.env.TIMEZONE || 'Europe/London',
   db: {
     hostCandidates: localMysqlHostCandidates(),
     port: numberFromEnv('DB_PORT', 3306),

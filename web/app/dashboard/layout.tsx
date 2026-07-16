@@ -1,6 +1,7 @@
 import { Header } from "@/components/dashboard/header";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { AuthGuard } from "@/components/auth/auth-guard";
+import { NotificationsProvider } from "@/components/notifications/notifications-provider";
 
 export default function DashboardLayout({
   children,
@@ -9,6 +10,7 @@ export default function DashboardLayout({
 }) {
   return (
     <AuthGuard>
+    <NotificationsProvider>
     <div className="flex h-dvh overflow-hidden bg-[#e8e8eb]">
       <div className="flex min-h-0 flex-1 overflow-hidden bg-[#f7f8fa] shadow-[0_28px_90px_rgba(15,23,42,0.13)] ring-1 ring-white/80">
         <Sidebar />
@@ -21,6 +23,7 @@ export default function DashboardLayout({
         </div>
       </div>
     </div>
+    </NotificationsProvider>
     </AuthGuard>
   );
 }

@@ -35,6 +35,7 @@ import {
 } from "@/libs/api/settings";
 import {
   getNotificationSettings,
+  testDiscordWebhook,
   updateNotificationSettings,
   type NotificationChannel as ApiNotificationChannel,
 } from "@/libs/api/notifications";
@@ -61,6 +62,10 @@ const defaultValues: SettingsFormValues = {
   timezone: "Dubai",
   defaultSenderName: "AHM Web Team",
   taskAssignments: "Email",
+  reviews: "Both",
+  clientLogs: "Both",
+  issues: "Email",
+  security: "Both",
   healthAlerts: "Both",
   passwordAgeAlerts: "Discord",
   dailyUserSummary: "Email",
@@ -326,6 +331,7 @@ export function SettingsView() {
     useState<GoogleStatus>("Disconnected");
   const [googleTestStatus, setGoogleTestStatus] =
     useState<GoogleTestStatus>("Not tested");
+  const [discordTesting, setDiscordTesting] = useState(false);
 
   const {
     control,
@@ -361,6 +367,10 @@ export function SettingsView() {
           timezone: workspace.timezone as SettingsFormValues["timezone"],
           defaultSenderName: workspace.defaultSenderName,
           taskAssignments: fromApiChannel[notifications.taskAssignments],
+          reviews: fromApiChannel[notifications.reviews],
+          clientLogs: fromApiChannel[notifications.clientLogs],
+          issues: fromApiChannel[notifications.issues],
+          security: fromApiChannel[notifications.security],
           healthAlerts: fromApiChannel[notifications.healthAlerts],
           passwordAgeAlerts: fromApiChannel[notifications.passwordAgeAlerts],
           dailyUserSummary: fromApiChannel[notifications.dailyUserSummary],
@@ -417,6 +427,10 @@ export function SettingsView() {
         }),
         updateNotificationSettings({
           taskAssignments: toApiChannel[values.taskAssignments],
+          reviews: toApiChannel[values.reviews],
+          clientLogs: toApiChannel[values.clientLogs],
+          issues: toApiChannel[values.issues],
+          security: toApiChannel[values.security],
           healthAlerts: toApiChannel[values.healthAlerts],
           passwordAgeAlerts: toApiChannel[values.passwordAgeAlerts],
           dailyUserSummary: toApiChannel[values.dailyUserSummary],
@@ -511,6 +525,27 @@ export function SettingsView() {
       const message =
         err instanceof Error ? err.message : "Unable to test Google email connector.";
       notify.error("Google email test failed", { description: message });
+    }
+  };
+
+  const testDiscord = async () => {
+    setDiscordTesting(true);
+    try {
+      // Persist the URL first so the backend tests the value on screen.
+      const values = getValues();
+      await updateNotificationSettings({ discordWebhookUrl: values.discordWebhookUrl });
+      const result = await testDiscordWebhook();
+      if (result.ok) {
+        notify.success("Discord test sent", { description: result.message });
+      } else {
+        notify.error("Discord test failed", { description: result.message });
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unable to reach Discord.";
+      notify.error("Discord test failed", { description: message });
+    } finally {
+      setDiscordTesting(false);
     }
   };
 
@@ -626,27 +661,61 @@ export function SettingsView() {
         title="Notifications"
         description="Choose whether each alert is off, sent by email, sent to Discord, or sent to both."
       >
-        <div className="mb-4">
-          <ControlledField
-            control={control}
-            name="discordWebhookUrl"
-            label="Discord Webhook URL"
-            placeholder="https://discord.com/api/webhooks/..."
-            type="url"
-          />
+        <div className="mb-4 flex items-end gap-3">
+          <div className="flex-1">
+            <ControlledField
+              control={control}
+              name="discordWebhookUrl"
+              label="Discord Webhook URL"
+              placeholder="https://discord.com/api/webhooks/..."
+              type="url"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            onPress={testDiscord}
+            isDisabled={discordTesting}
+          >
+            {discordTesting ? "Sending…" : "Send test"}
+          </Button>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           <NotificationRow
             control={control}
             name="taskAssignments"
             label="Task assignments"
-            description="Notify users when a task is assigned or moved to review."
+            description="Notify a user when a task or client-log stage is assigned to them."
+          />
+          <NotificationRow
+            control={control}
+            name="reviews"
+            label="Review requests"
+            description="Notify the reviewer when a task or stage needs their review."
+          />
+          <NotificationRow
+            control={control}
+            name="clientLogs"
+            label="Client Logs"
+            description="Blocked stages and meeting actions awaiting confirmation."
+          />
+          <NotificationRow
+            control={control}
+            name="issues"
+            label="Issue boards"
+            description="Issues applied to a client, and issues marked fixed."
+          />
+          <NotificationRow
+            control={control}
+            name="security"
+            label="Security"
+            description="Sensitive account events, e.g. when Viktor is connected."
           />
           <NotificationRow
             control={control}
             name="healthAlerts"
             label="Website health alerts"
-            description="Send an alert when QA, Lighthouse, or SEO checks fail."
+            description="Scan finished, critical findings, or a failed scan."
           />
           <NotificationRow
             control={control}

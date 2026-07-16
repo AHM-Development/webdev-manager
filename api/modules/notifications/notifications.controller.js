@@ -51,6 +51,14 @@ async function markRead(req, res, next) {
   }
 }
 
+async function markAllRead(req, res, next) {
+  try {
+    res.json(await service.markAllRead(req.user));
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function unreadCount(req, res, next) {
   try {
     res.json({ count: await service.unreadCount(req.user) });
@@ -71,10 +79,7 @@ async function test(req, res, next) {
 
 async function testDiscord(req, res, next) {
   try {
-    res.json({
-      ok: true,
-      message: 'Discord webhook test is queued. Real delivery will be wired with the Discord connector.',
-    });
+    res.json(await service.testDiscord());
   } catch (err) {
     next(err);
   }
@@ -93,7 +98,7 @@ async function testEmail(req, res, next) {
 
 async function runDailySummary(req, res, next) {
   try {
-    res.json({ notification: await service.runJob('daily_summary', req.user, context(req)) });
+    res.json({ result: await service.runJob('daily_summary', req.user, context(req)) });
   } catch (err) {
     next(err);
   }
@@ -101,7 +106,7 @@ async function runDailySummary(req, res, next) {
 
 async function runPreShift(req, res, next) {
   try {
-    res.json({ notification: await service.runJob('pre_shift', req.user, context(req)) });
+    res.json({ result: await service.runJob('pre_shift', req.user, context(req)) });
   } catch (err) {
     next(err);
   }
@@ -109,7 +114,7 @@ async function runPreShift(req, res, next) {
 
 async function runWeeklyDigest(req, res, next) {
   try {
-    res.json({ notification: await service.runJob('weekly_digest', req.user, context(req)) });
+    res.json({ result: await service.runJob('weekly_digest', req.user, context(req)) });
   } catch (err) {
     next(err);
   }
@@ -121,6 +126,7 @@ module.exports = {
   list: list,
   create: create,
   markRead: markRead,
+  markAllRead: markAllRead,
   unreadCount: unreadCount,
   test: test,
   testDiscord: testDiscord,

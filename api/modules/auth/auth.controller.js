@@ -68,16 +68,6 @@ async function logout(req, res, next) {
   }
 }
 
-async function forgotPassword(req, res, next) {
-  try {
-    await service.forgotPassword(req.body || {}, context(req));
-    res.json({
-      message: 'If an active account exists for that email, a reset link will be sent.',
-    });
-  } catch (err) {
-    next(err);
-  }
-}
 
 async function resetPassword(req, res, next) {
   try {
@@ -173,7 +163,6 @@ module.exports = {
   login: login,
   refresh: refresh,
   logout: logout,
-  forgotPassword: forgotPassword,
   resetPassword: resetPassword,
   me: me,
   sessions: sessions,

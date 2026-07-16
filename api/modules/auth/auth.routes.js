@@ -7,7 +7,6 @@ var router = express.Router();
 
 router.post('/login', limits.authRateLimit, controller.login);
 router.post('/refresh', limits.authRateLimit, controller.refresh);
-router.post('/forgot-password', limits.authRateLimit, controller.forgotPassword);
 router.post('/reset-password', limits.authRateLimit, controller.resetPassword);
 router.post('/register', limits.authRateLimit, function(req, res) {
   res.status(404).json({

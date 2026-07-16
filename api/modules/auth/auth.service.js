@@ -372,27 +372,10 @@ async function logout(user, input, context) {
   });
 }
 
-async function forgotPassword(input, context) {
-  var email = normalizeEmail(input.email);
-  var rows = await db.query(
-    `SELECT id, email, name
-     FROM users
-     WHERE email = :email AND status = 'active'
-     LIMIT 1`,
-    { email: email }
-  );
-  var user = rows[0];
-
-  if (!user) {
-    await activity.logActivity({
-      eventType: 'auth.password_reset_requested_unknown',
-      ip: context.ip,
-      userAgent: context.userAgent,
-      metadata: { email: email },
-    });
-    return { delivered: false };
-  }
-
+// Issues a single-use, short-lived reset token for a known user and emails the
+// link. Triggered only by an authenticated admin (see users.service) — there is
+// no anonymous self-service request, so there's no user-enumeration surface.
+async function issueResetLink(user, context) {
   var resetToken = security.randomToken(48);
   var tokenHash = security.sha256(resetToken);
   var expiresAt = new Date(Date.now() + env.auth.resetTokenTtlMinutes * 60 * 1000);
@@ -512,7 +495,7 @@ module.exports = {
   login: login,
   refresh: refresh,
   logout: logout,
-  forgotPassword: forgotPassword,
+  issueResetLink: issueResetLink,
   resetPassword: resetPassword,
   listSessions: listSessions,
   listActivity: listActivity,

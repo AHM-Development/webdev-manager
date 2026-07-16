@@ -13,10 +13,6 @@ export const securePasswordSchema = z
   .regex(/\d/, "Add a number.")
   .regex(/[^A-Za-z0-9]/, "Add a symbol.");
 
-export const forgotPasswordSchema = z.object({
-  email: z.email("Enter a valid email address"),
-});
-
 export const resetPasswordSchema = z
   .object({
     password: securePasswordSchema,
@@ -28,5 +24,4 @@ export const resetPasswordSchema = z
   });
 
 export type LoginValues = z.infer<typeof loginSchema>;
-export type ForgotPasswordValues = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;

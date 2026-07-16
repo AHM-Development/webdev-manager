@@ -34,7 +34,6 @@ export function attachInterceptors(client: AxiosInstance) {
       const isAuthEndpoint = [
         "/auth/login",
         "/auth/refresh",
-        "/auth/forgot-password",
         "/auth/reset-password",
       ].some((path) => url.includes(path));
 

@@ -30,7 +30,7 @@ import {
   TextField,
   useOverlayState,
 } from "@heroui/react";
-import { Copy, Eye, MailPlus, Pencil, Search, Send, Trash2 } from "lucide-react";
+import { Copy, Eye, KeyRound, MailPlus, Pencil, Search, Send, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
@@ -46,6 +46,7 @@ import {
   createUserInvite,
   deleteUser,
   listUsers,
+  sendUserResetLink,
   updateUser,
   type ApiUser,
 } from "@/libs/api/users";
@@ -396,6 +397,25 @@ export function UsersTable() {
     notify.success("User deleted");
   };
 
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const handleSendResetLink = async (user: AppUser) => {
+    setResettingId(user.id);
+    try {
+      const delivered = await sendUserResetLink(user.id);
+      notify.success("Reset link sent", {
+        description: delivered
+          ? `A password reset link was emailed to ${user.email}.`
+          : `Reset link generated for ${user.email}, but email delivery isn't configured.`,
+      });
+    } catch (err) {
+      notify.error("Could not send reset link", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setResettingId(null);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -517,6 +537,18 @@ export function UsersTable() {
                           <Pencil className="h-4 w-4" />
                         )}
                       </Button>
+                      {user.status === "Active" && (
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="ghost"
+                          aria-label={`Send password reset link to ${user.name}`}
+                          onPress={() => handleSendResetLink(user)}
+                          isDisabled={resettingId === user.id}
+                        >
+                          <KeyRound className="h-4 w-4 text-slate-500" />
+                        </Button>
+                      )}
                       <Button
                         isIconOnly
                         size="sm"

@@ -665,9 +665,32 @@ async function testDiscord(input) {
   };
 }
 
+// Admin-triggered password recovery: send a hardened, single-use reset link to
+// an active user. Replaces the (removed) anonymous self-service flow.
+async function sendResetLink(userId, actor, context) {
+  var rows = await db.query(
+    "SELECT id, email, name, status FROM users WHERE id = :id AND deleted_at IS NULL LIMIT 1",
+    { id: userId }
+  );
+  var user = rows[0];
+  if (!user) fail(404, 'USER_NOT_FOUND', 'User not found.');
+  if (user.status !== 'active') fail(400, 'USER_NOT_ACTIVE', 'Only active users can be sent a reset link.');
+
+  var delivery = await authService.issueResetLink(user, context);
+  await activity.logActivity({
+    userId: actor.id,
+    eventType: 'users.reset_link_sent',
+    ip: context.ip,
+    userAgent: context.userAgent,
+    metadata: { targetUserId: String(userId), delivered: delivery.delivered },
+  });
+  return { delivered: delivery.delivered };
+}
+
 module.exports = {
   listUsers: listUsers,
   getUser: getUser,
+  sendResetLink: sendResetLink,
   createInvite: createInvite,
   listInvites: listInvites,
   resendInvite: resendInvite,

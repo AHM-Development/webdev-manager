@@ -84,6 +84,14 @@ async function deleteUser(req, res, next) {
   }
 }
 
+async function sendResetLink(req, res, next) {
+  try {
+    res.json(await service.sendResetLink(req.params.userId, req.user, context(req)));
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getInvite(req, res, next) {
   try {
     res.json({ invite: await service.getInvite(req.params.token) });
@@ -160,6 +168,7 @@ module.exports = {
   revokeInvite: revokeInvite,
   updateUser: updateUser,
   deleteUser: deleteUser,
+  sendResetLink: sendResetLink,
   getInvite: getInvite,
   acceptInvite: acceptInvite,
   getProfile: getProfile,

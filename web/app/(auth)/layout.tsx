@@ -29,13 +29,14 @@ export default function AuthLayout({
               Agency command center
             </p>
             <h1 className="mt-6 max-w-xl text-5xl font-semibold leading-tight">
-              Control every client website from one secure operating layer.
+              Deliver, monitor, and hand over every client website — from one
+              secure workspace.
             </h1>
             <div className="mt-10 grid max-w-xl grid-cols-3 gap-3">
               {[
-                ["7", "Active clients"],
-                ["24/7", "Health signals"],
-                ["100%", "Audit trail focus"],
+                ["Deliver", "Timelines & tasks"],
+                ["Monitor", "Automated site scans"],
+                ["Protect", "Vaulted credentials"],
               ].map(([value, label]) => (
                 <div
                   key={label}
@@ -49,8 +50,8 @@ export default function AuthLayout({
           </div>
 
           <p className="max-w-md text-sm leading-6 text-slate-500">
-            Production readiness should include rate-limited auth, encrypted
-            credential storage, 2FA, least-privilege roles, and immutable logs.
+            Protected by rate-limited sign-in, encrypted credential storage,
+            least-privilege roles, and a complete audit trail.
           </p>
         </section>
 

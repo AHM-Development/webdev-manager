@@ -90,6 +90,13 @@ export async function updateUser(
   return data.user;
 }
 
+export async function sendUserResetLink(userId: string) {
+  const { data } = await apiClient.post<{ delivered: boolean }>(
+    endpoints.users.resetLink(userId)
+  );
+  return data.delivered;
+}
+
 export async function deleteUser(userId: string) {
   await apiClient.delete(endpoints.users.delete(userId));
 }

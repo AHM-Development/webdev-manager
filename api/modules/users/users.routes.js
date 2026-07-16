@@ -17,6 +17,7 @@ router.post('/invites/:inviteId/resend', controller.resendInvite);
 router.delete('/invites/:inviteId', controller.revokeInvite);
 router.get('/:userId', controller.getUser);
 router.patch('/:userId', controller.updateUser);
+router.post('/:userId/reset-link', controller.sendResetLink);
 router.delete('/:userId', controller.deleteUser);
 
 module.exports = router;

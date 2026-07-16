@@ -12,7 +12,6 @@ import {
 } from "@heroui/react";
 import { LockKeyhole, ShieldCheck } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -65,11 +64,11 @@ const LoginPage = () => {
               Secure access
             </div>
             <h2 className="text-2xl font-semibold tracking-tight">
-              Sign in to operations
+              Sign in to your workspace
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              Manage clients, tasks, health audits, reports, and protected
-              website credentials.
+              Pick up your projects, client timelines, site health, and
+              credentials — right where you left off.
             </p>
           </div>
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#24c7d5] via-[#0b7de3] to-[#082a78] text-white shadow-lg shadow-blue-500/20">
@@ -103,7 +102,7 @@ const LoginPage = () => {
                   <Input
                     ref={field.ref}
                     type="email"
-                    placeholder="you@agency.com"
+                    placeholder="you@alliedhealthmedia.co.uk"
                     autoComplete="email"
                     className="mt-1 border-slate-200 bg-white text-slate-950 placeholder:text-slate-400"
                   />
@@ -115,12 +114,6 @@ const LoginPage = () => {
                 </TextField>
               )}
             />
-
-            <div className="flex justify-end">
-              <Link href="/forgot-password" className="text-sm font-medium text-[#0b7de3] hover:underline">
-                Forgot password?
-              </Link>
-            </div>
 
             <Controller
               control={control}
@@ -146,13 +139,13 @@ const LoginPage = () => {
             className="h-11 w-full rounded-xl bg-gradient-to-r from-[#24c7d5] via-[#0b7de3] to-[#082a78] font-semibold text-white shadow-lg shadow-blue-500/20 hover:brightness-105"
             isDisabled={isSubmitting || isLoading}
           >
-            {isSubmitting ? "Checking access..." : "Continue"}
+            {isSubmitting ? "Signing in…" : "Sign in"}
           </Button>
         </Form>
 
         <p className="mt-5 text-xs leading-5 text-slate-500">
-          Access should be limited to approved team members. Do not share
-          credentials or store passwords outside the managed vault.
+          For approved team members only. Never share your login, or keep client
+          passwords anywhere but the vault.
         </p>
       </CardContent>
     </Card>

@@ -1,7 +1,4 @@
-import type {
-  ForgotPasswordValues,
-  ResetPasswordValues,
-} from "@/components/login/schema/loginschema";
+import type { ResetPasswordValues } from "@/components/login/schema/loginschema";
 
 import { apiClient } from "./client";
 import { endpoints } from "./endpoints";
@@ -17,14 +14,6 @@ export type AuthSession = {
   createdAt: string;
   current: boolean;
 };
-
-export async function forgotPassword(payload: ForgotPasswordValues) {
-  const { data } = await apiClient.post<{ message: string }>(
-    endpoints.auth.forgotPassword,
-    payload
-  );
-  return data.message;
-}
 
 export async function resetPassword(token: string, payload: ResetPasswordValues) {
   const { data } = await apiClient.post<{ message: string }>(

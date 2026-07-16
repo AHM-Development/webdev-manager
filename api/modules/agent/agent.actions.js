@@ -18,6 +18,7 @@ var notes = require('../notes/notes.service');
 var issues = require('../issues/issues.service');
 var health = require('../website-health/website-health.service');
 var clientLogs = require('../client-logs/client-logs.service');
+var insights = require('../insights/insights.service');
 
 var ALL = roles.ALL_ROLES;
 var WRITE = roles.WRITE_ROLES;
@@ -31,6 +32,10 @@ function read(roleGroup, run) { return def('read', roleGroup, run); }
 function write(roleGroup, run, describe) { return def('write', roleGroup, run, describe); }
 
 var ACTIONS = {
+  // ----- Insights (read-only aggregate rollups; no writes) -----
+  'insights.dashboard': read(ALL, function(u) { return insights.dashboard(u); }),
+  'insights.project': read(ALL, function(u, a) { return insights.project(a.projectId, u); }),
+
   // ----- Projects / Clients (read + update; no create, no delete) -----
   'projects.list': read(ALL, function(u, a) { return projects.listProjects(a.filters || {}); }),
   'projects.get': read(ALL, function(u, a) { return projects.getProject(a.projectId); }),

@@ -11,6 +11,7 @@ var env = require('../../config/env');
 var security = require('../../lib/security');
 var tokens = require('./agent.tokens');
 var redisStore = require('../../lib/redis');
+var notifications = require('../notifications/notifications.service');
 
 function fail(status, code, message) {
   var err = new Error(message);
@@ -120,6 +121,13 @@ async function issueGrant(userId, scope) {
      VALUES (:id, :userId, :agent, :scope, :hash)`,
     { id: grantId, userId: user.id, agent: env.agent.clientId, scope: scope, hash: tokens.hashRefreshToken(refreshToken) }
   );
+
+  notifications.dispatch(notifications.CATEGORY.SECURITY, {
+    userId: user.id, audienceType: 'user', type: 'agent_connected',
+    title: 'Viktor was connected to your account',
+    message: 'An AI assistant can now act on your behalf. You can revoke this anytime from your profile.',
+    actionUrl: '/dashboard/my-profile', metadata: { grantId: grantId },
+  }, user, null).catch(function() {});
 
   return {
     accessToken: tokens.mintAccessToken(user, grantId, scope),

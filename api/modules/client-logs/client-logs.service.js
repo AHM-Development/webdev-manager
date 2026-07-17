@@ -27,7 +27,7 @@ function notifyStageChanges(row, input, actor, context) {
       }, actor, context).catch(function() {});
     }
     notifications.dispatch(notifications.CATEGORY.CLIENT_LOGS, {
-      audienceType: 'role', audienceValue: 'web_dev_manager', type: 'stage_blocked',
+      audienceType: 'role', audienceValue: 'superadmin', type: 'stage_blocked',
       title: 'A client stage is blocked', message: row.name, actionUrl: url, metadata: meta,
     }, actor, context).catch(function() {});
   }
@@ -528,13 +528,14 @@ async function updateStage(stageId, input, user) {
 
 // ---------- assignable staff users ----------
 async function listAssignableUsers() {
+  // Everyone who can own/participate in stage work (all active roles).
   var rows = await db.query(
-    `SELECT id, name, email, role FROM users
+    `SELECT id, name, email, role, title FROM users
       WHERE status = 'active'
-        AND role IN ('superadmin','web_dev_manager','developer','designer','client_success_manager')
+        AND role IN ('superadmin','developer','staff')
       ORDER BY name ASC`
   );
-  return rows.map(function(row) { return { id: String(row.id), name: row.name, email: row.email, role: row.role }; });
+  return rows.map(function(row) { return { id: String(row.id), name: row.name, email: row.email, role: row.role, title: row.title || null }; });
 }
 
 // ---------- tasks linked to a stage ----------
@@ -793,7 +794,7 @@ async function importMeeting(payload, user) {
     { meetingId: String(meetingId), actionCount: actions.length });
   if (actions.length) {
     notifications.dispatch(notifications.CATEGORY.CLIENT_LOGS, {
-      audienceType: 'role', audienceValue: 'web_dev_manager', type: 'meeting_actions',
+      audienceType: 'role', audienceValue: 'superadmin', type: 'meeting_actions',
       title: 'Meeting actions need review',
       message: actions.length + ' action(s) from "' + String(meeting.title || 'Meeting') + '" await confirmation',
       actionUrl: '/dashboard/client-logs', metadata: { meetingId: String(meetingId), projectId: String(projectId) },

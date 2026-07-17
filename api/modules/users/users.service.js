@@ -10,14 +10,18 @@ var roleConfig = require('../../config/roles');
 
 var ROLES = roleConfig.ALL_ROLES;
 var INVITABLE_ROLES = [
-  roleConfig.ROLES.WEB_DEV_MANAGER,
   roleConfig.ROLES.DEVELOPER,
-  roleConfig.ROLES.DESIGNER,
-  roleConfig.ROLES.CLIENT_SUCCESS_MANAGER,
-  roleConfig.ROLES.SPECTATOR,
+  roleConfig.ROLES.STAFF,
 ];
 var STATUSES = ['active', 'invited', 'disabled'];
 var GENDERS = ['male', 'female'];
+
+// Staff job title (designation). Blank/unknown values normalize to null; any
+// role may carry one, but it's meaningful mainly for Staff.
+function safeTitle(title) {
+  var value = String(title || '').trim();
+  return roleConfig.STAFF_TITLE_VALUES.indexOf(value) === -1 ? null : value;
+}
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -55,7 +59,7 @@ function mapUser(row) {
 }
 
 function safeRole(role) {
-  return ROLES.indexOf(role) === -1 ? roleConfig.ROLES.SPECTATOR : role;
+  return ROLES.indexOf(role) === -1 ? roleConfig.ROLES.STAFF : role;
 }
 
 function safeStatus(status) {
@@ -66,7 +70,7 @@ async function getUserRow(userId) {
   var rows = await db.query(
     `SELECT id, email, name, first_name, last_name, phone_e164, phone_country,
             discord_id, discord_verified_at, date_of_birth, gender, avatar_url,
-            role, status, invited_at, invite_accepted_at, password_updated_at,
+            role, title, status, invited_at, invite_accepted_at, password_updated_at,
             last_login_at, created_at, updated_at
      FROM users
      WHERE id = :userId AND deleted_at IS NULL
@@ -98,7 +102,7 @@ async function listUsers(filters) {
   var rows = await db.query(
     `SELECT id, email, name, first_name, last_name, phone_e164, phone_country,
             discord_id, discord_verified_at, date_of_birth, gender, avatar_url,
-            role, status, invited_at, invite_accepted_at, password_updated_at,
+            role, title, status, invited_at, invite_accepted_at, password_updated_at,
             last_login_at, created_at, updated_at
      FROM users
      WHERE ` + where.join(' AND ') + `
@@ -120,14 +124,17 @@ async function createInvite(input, actor, context) {
   var firstName = String(input.firstName || '').trim();
   var lastName = String(input.lastName || '').trim();
   var role = String(input.role || '');
+  var title = safeTitle(input.title);
 
   if (!assertEmail(email)) fail(400, 'VALIDATION_ERROR', 'Valid email is required.');
   if (!firstName) fail(400, 'VALIDATION_ERROR', 'First name is required.');
   if (!lastName) fail(400, 'VALIDATION_ERROR', 'Last name is required.');
   if (ROLES.indexOf(role) === -1) fail(400, 'VALIDATION_ERROR', 'Role is invalid.');
   if (INVITABLE_ROLES.indexOf(role) === -1) {
-    fail(400, 'ROLE_NOT_INVITABLE', 'Only developers and spectators can be invited.');
+    fail(400, 'ROLE_NOT_INVITABLE', 'Only developers and staff can be invited.');
   }
+  // A title only applies to Staff; ignore it for other roles.
+  if (role !== roleConfig.ROLES.STAFF) title = null;
 
   var existing = await db.query(
     'SELECT id, status FROM users WHERE email = :email AND deleted_at IS NULL LIMIT 1',
@@ -146,6 +153,7 @@ async function createInvite(input, actor, context) {
            last_name = :lastName,
            name = :name,
            role = :role,
+           title = :title,
            status = 'invited',
            invited_at = UTC_TIMESTAMP()
        WHERE id = :userId`,
@@ -155,15 +163,16 @@ async function createInvite(input, actor, context) {
         lastName: lastName,
         name: fullName(firstName, lastName, email),
         role: role,
+        title: title,
       }
     );
   } else {
     var unusablePasswordHash = await bcrypt.hash(security.randomToken(32), env.auth.bcryptRounds);
     var result = await db.query(
       `INSERT INTO users
-        (email, password_hash, name, first_name, last_name, role, status, invited_at)
+        (email, password_hash, name, first_name, last_name, role, title, status, invited_at)
        VALUES
-        (:email, :passwordHash, :name, :firstName, :lastName, :role, 'invited', UTC_TIMESTAMP())`,
+        (:email, :passwordHash, :name, :firstName, :lastName, :role, :title, 'invited', UTC_TIMESTAMP())`,
       {
         email: email,
         passwordHash: unusablePasswordHash,
@@ -171,6 +180,7 @@ async function createInvite(input, actor, context) {
         firstName: firstName,
         lastName: lastName,
         role: role,
+        title: title,
       }
     );
     userId = result.insertId;
@@ -190,15 +200,16 @@ async function createInvite(input, actor, context) {
 
   await db.query(
     `INSERT INTO user_invites
-      (id, user_id, email, token_hash, role, invited_by, expires_at)
+      (id, user_id, email, token_hash, role, title, invited_by, expires_at)
      VALUES
-      (:id, :userId, :email, :tokenHash, :role, :invitedBy, :expiresAt)`,
+      (:id, :userId, :email, :tokenHash, :role, :title, :invitedBy, :expiresAt)`,
     {
       id: inviteId,
       userId: userId,
       email: email,
       tokenHash: tokenHash,
       role: role,
+      title: title,
       invitedBy: actor && actor.id,
       expiresAt: security.mysqlDate(expiresAt),
     }
@@ -439,9 +450,12 @@ async function updateUser(userId, input, actor, context) {
   var email = input.email == null ? existing.email : normalizeEmail(input.email);
   var role = input.role == null ? existing.role : String(input.role);
   var status = input.status == null ? existing.status : String(input.status);
+  var title = input.title === undefined ? existing.title : safeTitle(input.title);
 
   if (ROLES.indexOf(role) === -1) fail(400, 'VALIDATION_ERROR', 'Role is invalid.');
   if (STATUSES.indexOf(status) === -1) fail(400, 'VALIDATION_ERROR', 'Status is invalid.');
+  // A title only applies to Staff; clear it for any other role.
+  if (role !== roleConfig.ROLES.STAFF) title = null;
 
   if (existing.role === roleConfig.ROLES.SUPERADMIN) {
     if (role !== roleConfig.ROLES.SUPERADMIN || status !== 'active') {
@@ -460,6 +474,7 @@ async function updateUser(userId, input, actor, context) {
          first_name = :firstName,
          last_name = :lastName,
          role = :role,
+         title = :title,
          status = :status
      WHERE id = :userId`,
     {
@@ -468,6 +483,7 @@ async function updateUser(userId, input, actor, context) {
       firstName: firstName,
       lastName: lastName,
       role: role,
+      title: title,
       status: status,
       userId: userId,
     }

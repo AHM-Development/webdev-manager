@@ -30,7 +30,7 @@ import {
   TextField,
   useOverlayState,
 } from "@heroui/react";
-import { Copy, Eye, KeyRound, MailPlus, Pencil, Search, Send, Trash2 } from "lucide-react";
+import { Copy, KeyRound, MailPlus, Pencil, Search, Send, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
@@ -38,9 +38,11 @@ import {
   statusColor,
   USER_ROLES,
   INVITABLE_USER_ROLES,
+  STAFF_TITLES,
   type AppUser,
   type AppUserRole,
   type AppUserStatus,
+  type StaffTitle,
 } from "./data";
 import {
   createUserInvite,
@@ -73,6 +75,7 @@ function emptyInvitedUser(): AppUser {
     lastName: "",
     email: "",
     role: "Developer",
+    title: null,
     status: "Invited",
     createdAt: today,
     lastActiveAt: today,
@@ -81,20 +84,30 @@ function emptyInvitedUser(): AppUser {
 
 const roleToApi: Record<AppUserRole, ApiUser["role"]> = {
   "Super Admin": "superadmin",
-  "Web Dev Manager": "web_dev_manager",
   Developer: "developer",
-  Designer: "designer",
-  "Client Success Manager": "client_success_manager",
-  Spectator: "spectator",
+  Staff: "staff",
 };
 
 const roleFromApi: Record<ApiUser["role"], AppUserRole> = {
   superadmin: "Super Admin",
-  web_dev_manager: "Web Dev Manager",
   developer: "Developer",
-  designer: "Designer",
+  staff: "Staff",
+};
+
+type ApiTitle = NonNullable<ApiUser["title"]>;
+
+const titleToApi: Record<StaffTitle, ApiTitle> = {
+  "Client Success Manager": "client_success_manager",
+  Designer: "designer",
+  SEO: "seo",
+  Operations: "operations",
+};
+
+const titleFromApi: Record<ApiTitle, StaffTitle> = {
   client_success_manager: "Client Success Manager",
-  spectator: "Spectator",
+  designer: "Designer",
+  seo: "SEO",
+  operations: "Operations",
 };
 
 const statusToApi: Record<AppUserStatus, ApiUser["status"]> = {
@@ -119,6 +132,7 @@ function mapApiUser(user: ApiUser): AppUser {
     lastName,
     email: user.email,
     role: roleFromApi[user.role],
+    title: user.title ? titleFromApi[user.title] : null,
     status: statusFromApi[user.status],
     createdAt: user.createdAt,
     lastActiveAt: user.lastLoginAt,
@@ -218,6 +232,14 @@ function InviteUserModal({
                   onChange={(value) => set("status", value as AppUserStatus)}
                   options={["Invited"]}
                 />
+                {draft.role === "Staff" && (
+                  <FormSelect
+                    label="Title"
+                    value={draft.title ?? "Client Success Manager"}
+                    onChange={(value) => set("title", value as StaffTitle)}
+                    options={STAFF_TITLES}
+                  />
+                )}
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-[#f7f8fa] p-4">
@@ -369,6 +391,7 @@ export function UsersTable() {
       lastName: user.lastName || rest.join(" ") || "User",
       email: user.email,
       role: roleToApi[user.role],
+      title: user.role === "Staff" && user.title ? titleToApi[user.title] : null,
     });
     setUsers((current) => [mapApiUser(result.user), ...current]);
     notify.success("Invite created", {
@@ -383,6 +406,7 @@ export function UsersTable() {
       lastName: user.lastName,
       email: user.email,
       role: roleToApi[user.role],
+      title: user.role === "Staff" && user.title ? titleToApi[user.title] : null,
       status: statusToApi[user.status],
     });
     setUsers((current) =>
@@ -504,9 +528,14 @@ export function UsersTable() {
                     <span className="text-sm text-gray-700">{user.email}</span>
                   </TableCell>
                   <TableCell>
-                    <Chip size="sm" variant="soft" color={roleColor[user.role]}>
-                      {user.role}
-                    </Chip>
+                    <div className="flex flex-col gap-1">
+                      <Chip size="sm" variant="soft" color={roleColor[user.role]}>
+                        {user.role}
+                      </Chip>
+                      {user.role === "Staff" && user.title && (
+                        <span className="text-xs text-slate-500">{user.title}</span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Chip
@@ -531,11 +560,7 @@ export function UsersTable() {
                         aria-label={`Edit or view ${user.name}`}
                         onPress={() => openEdit(user)}
                       >
-                        {user.role === "Spectator" ? (
-                          <Eye className="h-4 w-4" />
-                        ) : (
-                          <Pencil className="h-4 w-4" />
-                        )}
+                        <Pencil className="h-4 w-4" />
                       </Button>
                       {user.status === "Active" && (
                         <Button
@@ -634,6 +659,14 @@ function UserModal({
                   onChange={(value) => set("status", value as AppUserStatus)}
                   options={user.role === "Super Admin" ? ["Active"] : STATUS_OPTIONS}
                 />
+                {draft.role === "Staff" && (
+                  <FormSelect
+                    label="Title"
+                    value={draft.title ?? "Client Success Manager"}
+                    onChange={(value) => set("title", value as StaffTitle)}
+                    options={STAFF_TITLES}
+                  />
+                )}
               </div>
             </ModalBody>
             <ModalFooter className="flex justify-end gap-2">

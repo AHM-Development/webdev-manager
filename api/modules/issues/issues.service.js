@@ -482,7 +482,7 @@ async function addApplications(issueId, input, user, context) {
   await logIssueActivity(user, context, 'issues.apply', issue, { count: created });
   if (created > 0) {
     notifications.dispatch(notifications.CATEGORY.ISSUES, {
-      audienceType: 'role', audienceValue: 'web_dev_manager', type: 'issue_applied',
+      audienceType: 'role', audienceValue: 'superadmin', type: 'issue_applied',
       title: 'Issue applied to a client',
       message: (issue && issue.title) || 'Issue',
       actionUrl: '/dashboard/issue-boards', metadata: { issueId: String(issueId) },

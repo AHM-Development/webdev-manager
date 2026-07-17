@@ -22,6 +22,7 @@ var insights = require('../insights/insights.service');
 
 var ALL = roles.ALL_ROLES;
 var WRITE = roles.WRITE_ROLES;
+var STAFF_WRITE = roles.STAFF_WRITE_ROLES;
 var MANAGER = roles.MANAGER_ROLES;
 var SUPER = [roles.ROLES.SUPERADMIN];
 
@@ -62,11 +63,11 @@ var ACTIONS = {
     function(a) { return 'Add a stage to project ' + a.projectId; }),
   'clientLogs.reorderStages': write(MANAGER, function(u, a) { return clientLogs.reorderStages(a.projectId, a.orderedIds || [], u); },
     function(a) { return 'Reorder stages for project ' + a.projectId; }),
-  'clientLogs.updateStage': write(WRITE, function(u, a) { return clientLogs.updateStage(a.stageId, a.input || {}, u); },
+  'clientLogs.updateStage': write(STAFF_WRITE, function(u, a) { return clientLogs.updateStage(a.stageId, a.input || {}, u); },
     function(a) { return 'Update stage ' + a.stageId; }),
-  'clientLogs.addStageTask': write(WRITE, function(u, a, c) { return clientLogs.createStageTask(a.stageId, a.input || {}, u, c); },
+  'clientLogs.addStageTask': write(STAFF_WRITE, function(u, a, c) { return clientLogs.createStageTask(a.stageId, a.input || {}, u, c); },
     function(a) { return 'Add a task to stage ' + a.stageId; }),
-  'clientLogs.linkStageTask': write(WRITE, function(u, a) { return clientLogs.linkExistingTask(a.stageId, a.taskId, u); },
+  'clientLogs.linkStageTask': write(STAFF_WRITE, function(u, a) { return clientLogs.linkExistingTask(a.stageId, a.taskId, u); },
     function(a) { return 'Link task ' + a.taskId + ' to stage ' + a.stageId; }),
   'clientLogs.createTemplate': write(SUPER, function(u, a) { return clientLogs.createTemplate(a.input || {}, u); },
     function() { return 'Create a Client Logs template'; }),
@@ -78,11 +79,11 @@ var ACTIONS = {
     function(a) { return 'Update stage ' + a.stageId + ' on template ' + a.templateId; }),
   'clientLogs.reorderTemplateStages': write(SUPER, function(u, a) { return clientLogs.reorderTemplateStages(a.templateId, a.orderedIds || []); },
     function(a) { return 'Reorder template ' + a.templateId + ' stages'; }),
-  'clientLogs.importMeeting': write(WRITE, function(u, a) { return clientLogs.importMeeting(a.payload || a, u); },
+  'clientLogs.importMeeting': write(STAFF_WRITE, function(u, a) { return clientLogs.importMeeting(a.payload || a, u); },
     function() { return 'Import a meeting'; }),
-  'clientLogs.confirmMeetingAction': write(WRITE, function(u, a) { return clientLogs.confirmMeetingAction(a.actionId, a.input || {}, u); },
+  'clientLogs.confirmMeetingAction': write(STAFF_WRITE, function(u, a) { return clientLogs.confirmMeetingAction(a.actionId, a.input || {}, u); },
     function(a) { return 'Confirm meeting action ' + a.actionId + ' into a task'; }),
-  'clientLogs.rejectMeetingAction': write(WRITE, function(u, a) { return clientLogs.rejectMeetingAction(a.actionId, u); },
+  'clientLogs.rejectMeetingAction': write(STAFF_WRITE, function(u, a) { return clientLogs.rejectMeetingAction(a.actionId, u); },
     function(a) { return 'Reject meeting action ' + a.actionId; }),
 
   // ----- Website Health (run scans + read results; no profile edit, no form test) -----
@@ -104,13 +105,13 @@ var ACTIONS = {
   'tasks.list': read(ALL, function(u, a) { return tasks.listTasks(a.filters || {}, u); }),
   'tasks.get': read(ALL, function(u, a) { return tasks.getTask(a.taskId); }),
   'tasks.assignees': read(ALL, function() { return tasks.listAssignees(); }),
-  'tasks.create': write(WRITE, function(u, a, c) { return tasks.createTask(a.input || {}, u, c); },
+  'tasks.create': write(STAFF_WRITE, function(u, a, c) { return tasks.createTask(a.input || {}, u, c); },
     function(a) { return 'Create task "' + ((a.input && a.input.title) || 'Untitled') + '"'; }),
-  'tasks.update': write(WRITE, function(u, a, c) { return tasks.updateTask(a.taskId, a.input || {}, u, c); },
+  'tasks.update': write(STAFF_WRITE, function(u, a, c) { return tasks.updateTask(a.taskId, a.input || {}, u, c); },
     function(a) { return 'Update task ' + a.taskId; }),
-  'tasks.setStatus': write(WRITE, function(u, a, c) { return tasks.updateStatus(a.taskId, a.status, u, c); },
+  'tasks.setStatus': write(STAFF_WRITE, function(u, a, c) { return tasks.updateStatus(a.taskId, a.status, u, c); },
     function(a) { return 'Set task ' + a.taskId + ' status to ' + a.status; }),
-  'tasks.move': write(WRITE, function(u, a, c) { return tasks.moveTasks(a.input || {}, u, c); },
+  'tasks.move': write(STAFF_WRITE, function(u, a, c) { return tasks.moveTasks(a.input || {}, u, c); },
     function() { return 'Move / reorder tasks'; }),
 
   // ----- Notes (requester's own only, enforced by the notes service) -----

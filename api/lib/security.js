@@ -49,6 +49,7 @@ function publicUser(user) {
     gender: user.gender || null,
     avatarUrl: user.avatar_url || null,
     role: user.role,
+    title: user.title || null,
     status: user.status,
     invitedAt: user.invited_at || null,
     inviteAcceptedAt: user.invite_accepted_at || null,

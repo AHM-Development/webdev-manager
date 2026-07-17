@@ -88,7 +88,7 @@ export function MyProfileView() {
             ? "Super Admin"
             : user.role === "developer"
               ? "Developer"
-              : "Spectator"
+              : "Staff"
         );
         setInitials(
           `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase() ||

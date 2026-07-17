@@ -18,20 +18,22 @@ async function alterIgnoreDuplicate(sql) {
 
 async function ensureFinalRoles(tableName) {
   var rows = await db.query("SHOW COLUMNS FROM " + tableName + " LIKE 'role'");
-  var expected = "enum('superadmin','web_dev_manager','developer','designer','client_success_manager','spectator')";
+  var expected = "enum('superadmin','developer','staff')";
   if (rows[0] && String(rows[0].Type).toLowerCase() === expected) return;
 
   // Expand to a superset of every legacy + current value so no row is truncated,
-  // migrate the legacy values, then collapse to the canonical role set.
+  // migrate the retired values, then collapse to the canonical role set.
+  // Retired: admin, web_dev_manager, designer, client_success_manager, viewer,
+  // spectator. Staff is now the base role (spectator folds into it).
   await db.query(
     "ALTER TABLE " + tableName +
-      " MODIFY role ENUM('superadmin', 'admin', 'web_dev_manager', 'developer', 'designer', 'client_success_manager', 'viewer', 'spectator') NOT NULL DEFAULT 'spectator'"
+      " MODIFY role ENUM('superadmin', 'admin', 'web_dev_manager', 'developer', 'designer', 'client_success_manager', 'staff', 'viewer', 'spectator') NOT NULL DEFAULT 'staff'"
   );
-  await db.query("UPDATE " + tableName + " SET role = 'developer' WHERE role = 'admin'");
-  await db.query("UPDATE " + tableName + " SET role = 'spectator' WHERE role = 'viewer'");
+  await db.query("UPDATE " + tableName + " SET role = 'superadmin' WHERE role IN ('admin', 'web_dev_manager')");
+  await db.query("UPDATE " + tableName + " SET role = 'staff' WHERE role IN ('viewer', 'designer', 'client_success_manager', 'spectator')");
   await db.query(
     "ALTER TABLE " + tableName +
-      " MODIFY role ENUM('superadmin', 'web_dev_manager', 'developer', 'designer', 'client_success_manager', 'spectator') NOT NULL DEFAULT 'spectator'"
+      " MODIFY role ENUM('superadmin', 'developer', 'staff') NOT NULL DEFAULT 'staff'"
   );
 }
 
@@ -42,7 +44,7 @@ async function ensureSchema() {
       email VARCHAR(255) NOT NULL,
       password_hash VARCHAR(255) NOT NULL,
       name VARCHAR(160) NOT NULL,
-      role ENUM('superadmin', 'developer', 'spectator') NOT NULL DEFAULT 'spectator',
+      role ENUM('superadmin', 'developer', 'staff') NOT NULL DEFAULT 'staff',
       status ENUM('active', 'disabled') NOT NULL DEFAULT 'active',
       password_updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       last_login_at DATETIME NULL,
@@ -52,6 +54,13 @@ async function ensureSchema() {
       UNIQUE KEY users_email_unique (email)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // Staff job title (client_success_manager | designer | seo | operations) —
+  // a per-user designation, not a permission role. Added before the role
+  // migration so a retiring designer/CSM keeps their designation as a title.
+  await alterIgnoreDuplicate('ALTER TABLE users ADD COLUMN title VARCHAR(40) NULL AFTER role');
+  await db.query("UPDATE users SET title = 'designer' WHERE role = 'designer' AND (title IS NULL OR title = '')");
+  await db.query("UPDATE users SET title = 'client_success_manager' WHERE role = 'client_success_manager' AND (title IS NULL OR title = '')");
 
   await ensureFinalRoles('users');
 
@@ -151,7 +160,7 @@ async function ensureSchema() {
       user_id BIGINT UNSIGNED NOT NULL,
       email VARCHAR(255) NOT NULL,
       token_hash CHAR(64) NOT NULL,
-      role ENUM('superadmin', 'developer', 'spectator') NOT NULL DEFAULT 'spectator',
+      role ENUM('superadmin', 'developer', 'staff') NOT NULL DEFAULT 'staff',
       invited_by BIGINT UNSIGNED NULL,
       expires_at DATETIME NOT NULL,
       accepted_at DATETIME NULL,
@@ -170,6 +179,7 @@ async function ensureSchema() {
   `);
 
   await ensureFinalRoles('user_invites');
+  await alterIgnoreDuplicate('ALTER TABLE user_invites ADD COLUMN title VARCHAR(40) NULL AFTER role');
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS system_bootstrap (
@@ -1094,6 +1104,16 @@ async function ensureSchema() {
   await alterIgnoreDuplicate('ALTER TABLE tasks ADD COLUMN origin_meeting_action_id BIGINT UNSIGNED NULL');
   await alterIgnoreDuplicate('ALTER TABLE tasks ADD KEY tasks_stage_idx (stage_id)');
   await alterIgnoreDuplicate('ALTER TABLE tasks ADD KEY tasks_website_idx (website_id)');
+
+  // Task-request approval flow: Staff-created tasks start as 'pending' requests
+  // (requested_by set) and only join the board/summary once a Super Admin or
+  // Developer approves. Tasks created directly by SA/Dev default to 'approved'.
+  await alterIgnoreDuplicate("ALTER TABLE tasks ADD COLUMN request_status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'approved' AFTER status");
+  await alterIgnoreDuplicate('ALTER TABLE tasks ADD COLUMN requested_by BIGINT UNSIGNED NULL AFTER created_by');
+  await alterIgnoreDuplicate('ALTER TABLE tasks ADD COLUMN reviewed_by BIGINT UNSIGNED NULL AFTER requested_by');
+  await alterIgnoreDuplicate('ALTER TABLE tasks ADD COLUMN reviewed_at DATETIME NULL AFTER reviewed_by');
+  await alterIgnoreDuplicate('ALTER TABLE tasks ADD KEY tasks_request_status_idx (request_status)');
+  await alterIgnoreDuplicate('ALTER TABLE tasks ADD KEY tasks_requested_by_idx (requested_by)');
 
   // Additional notification categories (existing DBs).
   await alterIgnoreDuplicate("ALTER TABLE notification_settings ADD COLUMN reviews_channel ENUM('off','email','discord','both') NOT NULL DEFAULT 'both'");

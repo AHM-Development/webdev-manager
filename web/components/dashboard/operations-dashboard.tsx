@@ -147,7 +147,8 @@ function EmptyRow({ text }: { text: string }) {
 
 export function OperationsDashboard() {
   const { user } = useAuth();
-  const canSeeClientLogs = user?.role === "superadmin" || user?.role === "web_dev_manager";
+  const canSeeClientLogs =
+    user?.role === "superadmin" || user?.role === "developer" || user?.role === "staff";
   const [clientLogs, setClientLogs] = useState<ClientOverviewResult | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [workspaceTasks, setWorkspaceTasks] = useState<Task[]>([]);

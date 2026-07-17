@@ -64,8 +64,8 @@ export function Header() {
       ? "Super Admin"
       : user?.role === "developer"
         ? "Developer"
-        : user?.role === "spectator"
-          ? "Spectator"
+        : user?.role === "staff"
+          ? "Staff"
           : "Account";
 
   return (

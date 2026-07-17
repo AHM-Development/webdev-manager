@@ -19,13 +19,13 @@ export type ApiUser = {
   dateOfBirth: string | null;
   gender: "male" | "female" | null;
   avatarUrl: string | null;
-  role:
-    | "superadmin"
-    | "web_dev_manager"
-    | "developer"
-    | "designer"
+  role: "superadmin" | "developer" | "staff";
+  title:
     | "client_success_manager"
-    | "spectator";
+    | "designer"
+    | "seo"
+    | "operations"
+    | null;
   status: "active" | "invited" | "disabled";
   invitedAt: string | null;
   inviteAcceptedAt: string | null;
@@ -60,6 +60,7 @@ export async function createUserInvite(payload: {
   lastName: string;
   email: string;
   role: ApiUser["role"];
+  title?: ApiUser["title"];
 }) {
   const { data } = await apiClient.post<{
     user: ApiUser;
@@ -80,6 +81,7 @@ export async function updateUser(
     lastName: string;
     email: string;
     role: ApiUser["role"];
+    title?: ApiUser["title"];
     status: ApiUser["status"];
   }
 ) {

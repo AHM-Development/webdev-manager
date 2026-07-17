@@ -35,19 +35,19 @@ router.post('/projects/:projectId/apply-template', auth.requireRoles(roles.MANAG
 router.get('/projects/:projectId/launch-readiness', controller.launchReadiness);
 router.delete('/projects/:projectId/client-logs', auth.requireRoles([roles.ROLES.SUPERADMIN]), controller.clearClientLogs);
 router.get('/stages/:stageId', controller.getStage);
-router.patch('/stages/:stageId', auth.requireRoles(roles.WRITE_ROLES), controller.updateStage);
+router.patch('/stages/:stageId', auth.requireRoles(roles.STAFF_WRITE_ROLES), controller.updateStage);
 // Per-client stage management (add / remove / reorder) — Managers & Admins.
 router.post('/projects/:projectId/stages', auth.requireRoles(roles.MANAGER_ROLES), controller.addStage);
 router.post('/projects/:projectId/stages/reorder', auth.requireRoles(roles.MANAGER_ROLES), controller.reorderStages);
 router.delete('/stages/:stageId', auth.requireRoles(roles.MANAGER_ROLES), controller.removeStage);
-router.post('/stages/:stageId/tasks', auth.requireRoles(roles.WRITE_ROLES), controller.createStageTask);
-router.post('/stages/:stageId/tasks/link', auth.requireRoles(roles.WRITE_ROLES), controller.linkStageTask);
-router.delete('/stages/:stageId/tasks/:taskId', auth.requireRoles(roles.WRITE_ROLES), controller.unlinkStageTask);
+router.post('/stages/:stageId/tasks', auth.requireRoles(roles.STAFF_WRITE_ROLES), controller.createStageTask);
+router.post('/stages/:stageId/tasks/link', auth.requireRoles(roles.STAFF_WRITE_ROLES), controller.linkStageTask);
+router.delete('/stages/:stageId/tasks/:taskId', auth.requireRoles(roles.STAFF_WRITE_ROLES), controller.unlinkStageTask);
 
 // Meetings & AI-imported actions (the import endpoint is the n8n surface).
-router.post('/meetings/import', auth.requireRoles(roles.WRITE_ROLES), controller.importMeeting);
+router.post('/meetings/import', auth.requireRoles(roles.STAFF_WRITE_ROLES), controller.importMeeting);
 router.get('/projects/:projectId/meetings', controller.listMeetings);
-router.post('/meeting-actions/:actionId/confirm', auth.requireRoles(roles.WRITE_ROLES), controller.confirmMeetingAction);
-router.post('/meeting-actions/:actionId/reject', auth.requireRoles(roles.WRITE_ROLES), controller.rejectMeetingAction);
+router.post('/meeting-actions/:actionId/confirm', auth.requireRoles(roles.STAFF_WRITE_ROLES), controller.confirmMeetingAction);
+router.post('/meeting-actions/:actionId/reject', auth.requireRoles(roles.STAFF_WRITE_ROLES), controller.rejectMeetingAction);
 
 module.exports = router;

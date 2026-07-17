@@ -1,11 +1,12 @@
-export type AppUserRole =
-  | "Super Admin"
-  | "Web Dev Manager"
-  | "Developer"
-  | "Designer"
-  | "Client Success Manager"
-  | "Spectator";
+export type AppUserRole = "Super Admin" | "Developer" | "Staff";
 export type AppUserStatus = "Active" | "Invited" | "Disabled";
+
+// Staff job titles (designations) — a label on Staff users, not a permission role.
+export type StaffTitle =
+  | "Client Success Manager"
+  | "Designer"
+  | "SEO"
+  | "Operations";
 
 export type AppUser = {
   id: string;
@@ -14,6 +15,7 @@ export type AppUser = {
   lastName: string;
   email: string;
   role: AppUserRole;
+  title: StaffTitle | null;
   status: AppUserStatus;
   createdAt: string;
   lastActiveAt: string | null;
@@ -21,18 +23,19 @@ export type AppUser = {
 
 export const USER_ROLES: AppUserRole[] = [
   "Super Admin",
-  "Web Dev Manager",
   "Developer",
-  "Designer",
-  "Client Success Manager",
-  "Spectator",
+  "Staff",
 ];
 export const INVITABLE_USER_ROLES: AppUserRole[] = [
-  "Web Dev Manager",
   "Developer",
-  "Designer",
+  "Staff",
+];
+
+export const STAFF_TITLES: StaffTitle[] = [
   "Client Success Manager",
-  "Spectator",
+  "Designer",
+  "SEO",
+  "Operations",
 ];
 
 export const roleColor: Record<
@@ -40,11 +43,8 @@ export const roleColor: Record<
   "danger" | "accent" | "default"
 > = {
   "Super Admin": "danger",
-  "Web Dev Manager": "danger",
   Developer: "accent",
-  Designer: "accent",
-  "Client Success Manager": "accent",
-  Spectator: "default",
+  Staff: "default",
 };
 
 export const statusColor: Record<

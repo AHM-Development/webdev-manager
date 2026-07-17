@@ -104,8 +104,10 @@ function LaunchReadinessPanel({ readiness }: { readiness: LaunchReadiness }) {
 export function ClientLogsView() {
   const { user } = useAuth();
   const role = user?.role;
-  const canManage = role === "superadmin" || role === "web_dev_manager";
-  const canEdit = canManage || role === "developer";
+  // Structural management (apply template, add/reorder/remove stages) is superadmin-only.
+  const canManage = role === "superadmin";
+  // Editing stages/tasks/meetings is open to developers and staff too.
+  const canEdit = canManage || role === "developer" || role === "staff";
   const isSuperAdmin = role === "superadmin";
 
   const [templates, setTemplates] = useState<ClientLogTemplate[]>([]);

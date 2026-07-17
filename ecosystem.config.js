@@ -6,13 +6,25 @@
 //   pm2 save        # remember the process list
 //   pm2 startup     # re-launch on server reboot (run the command it prints)
 //
-// Both processes bind to 127.0.0.1 only; nginx reverse-proxies to them.
+// Both processes bind to 127.0.0.1 only; the web server reverse-proxies to them.
+//
+// Every path is resolved from THIS file's location, so it works at any clone
+// path and no matter which directory `pm2 start` was invoked from. (A relative
+// `cwd` is resolved against the PM2 daemon's cwd, not this file — which silently
+// launches the apps from the wrong directory.)
+
+const path = require("path");
+
+const API_DIR = path.join(__dirname, "api");
+const WEB_DIR = path.join(__dirname, "web");
+
 module.exports = {
   apps: [
     {
       name: "ahm-api",
-      cwd: "./api",
-      script: "./bin/www",
+      cwd: API_DIR,
+      script: path.join(API_DIR, "bin", "www"),
+      interpreter: "node",
       exec_mode: "fork",
       instances: 1,
       max_restarts: 10,
@@ -26,10 +38,13 @@ module.exports = {
     },
     {
       name: "ahm-web",
-      cwd: "./web",
-      // `next start` — the build must already exist (npm run build).
-      script: "npm",
+      cwd: WEB_DIR,
+      // Run Next's binary directly rather than `npm start`: npm resolves
+      // package.json from its own cwd and needs to be on PM2's PATH (a problem
+      // under nvm). This is equivalent to `next start` inside web/.
+      script: path.join(WEB_DIR, "node_modules", "next", "dist", "bin", "next"),
       args: "start",
+      interpreter: "node",
       exec_mode: "fork",
       instances: 1,
       max_restarts: 10,

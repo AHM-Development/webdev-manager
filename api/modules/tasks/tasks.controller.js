@@ -16,6 +16,8 @@ async function list(req, res, next) {
           status: req.query.status,
           assignee: req.query.assignee,
           mine: req.query.mine === 'true',
+          requests: req.query.requests === 'true',
+          requestStatus: req.query.requestStatus,
         },
         req.user
       ),
@@ -110,6 +112,22 @@ async function remove(req, res, next) {
   }
 }
 
+async function approve(req, res, next) {
+  try {
+    res.json({ task: await service.approveRequest(req.params.taskId, req.user, context(req)) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function reject(req, res, next) {
+  try {
+    res.json({ task: await service.rejectRequest(req.params.taskId, req.user, context(req)) });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   list: list,
   mine: mine,
@@ -120,4 +138,6 @@ module.exports = {
   updateStatus: updateStatus,
   move: move,
   remove: remove,
+  approve: approve,
+  reject: reject,
 };

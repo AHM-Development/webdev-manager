@@ -1,9 +1,23 @@
 var db = require('../../db/pool');
 var activity = require('../auth/activity.service');
 var notifications = require('../notifications/notifications.service');
+var roles = require('../../config/roles');
 
 var STATUSES = ['Backlog', 'In Progress', 'Review', 'Blocked', 'Done'];
 var PRIORITIES = ['Low', 'Medium', 'High'];
+
+function isStaff(user) {
+  return !!user && user.role === roles.ROLES.STAFF;
+}
+
+// Staff may only touch their own request while it's still pending; everything
+// else (approved tasks, other people's requests) is off-limits to them.
+function assertStaffCanModify(task, user) {
+  if (!isStaff(user)) return;
+  if (String(task.requestedBy || '') !== String(user.id) || task.requestStatus !== 'pending') {
+    fail(403, 'FORBIDDEN', 'Staff can only edit their own pending task requests.');
+  }
+}
 
 function fail(status, code, message) {
   var err = new Error(message);
@@ -139,6 +153,11 @@ function rowToTask(row) {
     acceptanceCriteria: parseJson(row.acceptance_criteria, []),
     affectedUrls: parseJson(row.affected_urls, []),
     verificationStatus: row.verification_status || 'unverified',
+    requestStatus: row.request_status || 'approved',
+    requestedBy: row.requested_by ? String(row.requested_by) : null,
+    requestedByName: row.requested_by_name || null,
+    reviewedByName: row.reviewed_by_name || null,
+    reviewedAt: row.reviewed_at || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -146,7 +165,11 @@ function rowToTask(row) {
 
 async function getTask(taskId) {
   var rows = await db.query(
-    'SELECT * FROM tasks WHERE id = :taskId AND deleted_at IS NULL LIMIT 1',
+    `SELECT t.*, rq.name AS requested_by_name, rv.name AS reviewed_by_name
+     FROM tasks t
+     LEFT JOIN users rq ON rq.id = t.requested_by
+     LEFT JOIN users rv ON rv.id = t.reviewed_by
+     WHERE t.id = :taskId AND t.deleted_at IS NULL LIMIT 1`,
     { taskId: taskId }
   );
   if (!rows[0]) fail(404, 'TASK_NOT_FOUND', 'Task not found.');
@@ -159,7 +182,7 @@ async function listAssignees() {
      FROM users
      WHERE deleted_at IS NULL
        AND status = 'active'
-       AND role IN ('superadmin', 'developer')
+       AND role IN ('superadmin', 'developer', 'staff')
      ORDER BY name ASC, email ASC`
   );
   return rows.map(function(row) {
@@ -199,9 +222,26 @@ async function listTasks(filters, user) {
     params.userEmail = user.email || '';
   }
 
+  if (filters.requestStatus) {
+    where.push('t.request_status = :requestStatus');
+    params.requestStatus = filters.requestStatus;
+  }
+
+  // The Task Requests view: only tasks that went through the request flow.
+  // Staff are scoped to their own requests; SA/Dev see everyone's.
+  if (filters.requests) {
+    where.push('t.requested_by IS NOT NULL');
+    if (isStaff(user)) {
+      where.push('t.requested_by = :requesterId');
+      params.requesterId = user.id;
+    }
+  }
+
   var rows = await db.query(
-    `SELECT t.*
+    `SELECT t.*, rq.name AS requested_by_name, rv.name AS reviewed_by_name
      FROM tasks t
+     LEFT JOIN users rq ON rq.id = t.requested_by
+     LEFT JOIN users rv ON rv.id = t.reviewed_by
      WHERE ` + where.join(' AND ') + `
      ORDER BY t.sort_order ASC, t.due_date IS NULL ASC, t.due_date ASC, t.updated_at DESC`,
     params
@@ -307,15 +347,19 @@ function notifyReviewer(task, actor, context, prevReviewerId) {
 async function createTask(input, user, context) {
   var payload = await normalizePayload(input || {}, false);
   var sortOrder = await nextSortOrder(payload.projectId);
+  // Staff-created tasks are pending requests; SA/Dev create approved tasks.
+  var asRequest = isStaff(user);
   var result = await db.query(
     `INSERT INTO tasks
       (project_id, website_id, stage_id, title, description, checklist, attachments, status, priority,
        assignee_user_id, assignee_name, reviewer_user_id, start_date, due_date, is_critical,
-       acceptance_criteria, affected_urls, origin_meeting_action_id, sort_order, created_by, updated_by)
+       acceptance_criteria, affected_urls, origin_meeting_action_id, sort_order, created_by, updated_by,
+       request_status, requested_by)
      VALUES
       (:projectId, :websiteId, :stageId, :title, :description, :checklist, :attachments, :status, :priority,
        :assigneeUserId, :assigneeName, :reviewerUserId, :startDate, :dueDate, :isCritical,
-       :acceptanceCriteria, :affectedUrls, :originMeetingActionId, :sortOrder, :userId, :userId)`,
+       :acceptanceCriteria, :affectedUrls, :originMeetingActionId, :sortOrder, :userId, :userId,
+       :requestStatus, :requestedBy)`,
     {
       projectId: payload.projectId,
       websiteId: payload.websiteId,
@@ -337,17 +381,74 @@ async function createTask(input, user, context) {
       dueDate: payload.dueDate,
       sortOrder: sortOrder,
       userId: user.id,
+      requestStatus: asRequest ? 'pending' : 'approved',
+      requestedBy: asRequest ? user.id : null,
     }
   );
   var task = await getTask(result.insertId);
-  await logTaskActivity(user, context, 'tasks.create', task);
-  notifyAssignee(task, user, context, null);
-  notifyReviewer(task, user, context, null);
+  await logTaskActivity(user, context, asRequest ? 'tasks.request' : 'tasks.create', task);
+  if (asRequest) {
+    notifyRequestSubmitted(task, user, context);
+  } else {
+    notifyAssignee(task, user, context, null);
+    notifyReviewer(task, user, context, null);
+  }
   return task;
+}
+
+// ---- task-request approval flow ----
+async function approveRequest(taskId, user, context) {
+  var task = await getTask(taskId);
+  if (task.requestStatus !== 'pending') fail(400, 'NOT_PENDING', 'Only a pending request can be approved.');
+  await db.query(
+    `UPDATE tasks SET request_status = 'approved', reviewed_by = :userId, reviewed_at = UTC_TIMESTAMP(),
+            updated_by = :userId WHERE id = :taskId AND deleted_at IS NULL`,
+    { taskId: taskId, userId: user.id }
+  );
+  var updated = await getTask(taskId);
+  await logTaskActivity(user, context, 'tasks.request_approved', updated);
+  notifyRequestDecided(updated, user, context, 'approved');
+  return updated;
+}
+
+async function rejectRequest(taskId, user, context) {
+  var task = await getTask(taskId);
+  if (task.requestStatus !== 'pending') fail(400, 'NOT_PENDING', 'Only a pending request can be rejected.');
+  await db.query(
+    `UPDATE tasks SET request_status = 'rejected', reviewed_by = :userId, reviewed_at = UTC_TIMESTAMP(),
+            updated_by = :userId WHERE id = :taskId AND deleted_at IS NULL`,
+    { taskId: taskId, userId: user.id }
+  );
+  var updated = await getTask(taskId);
+  await logTaskActivity(user, context, 'tasks.request_rejected', updated);
+  notifyRequestDecided(updated, user, context, 'rejected');
+  return updated;
+}
+
+// Notify managers (SA/Dev) that a new task request needs review. Best-effort.
+function notifyRequestSubmitted(task, actor, context) {
+  ['superadmin', 'developer'].forEach(function(role) {
+    notifications.dispatch(notifications.CATEGORY.TASK_ASSIGNMENT, {
+      audienceType: 'role', audienceValue: role, type: 'task_request_submitted',
+      title: 'New task request', message: (actor.name || 'A staff member') + ' requested: ' + task.title,
+      actionUrl: '/dashboard/tasks', metadata: { taskId: task.id },
+    }, actor, context).catch(function() {});
+  });
+}
+
+// Notify the requester of the approve/reject decision. Best-effort.
+function notifyRequestDecided(task, actor, context, decision) {
+  if (!task.requestedBy) return;
+  notifications.dispatch(notifications.CATEGORY.TASK_ASSIGNMENT, {
+    userId: task.requestedBy, audienceType: 'user', type: 'task_request_' + decision,
+    title: 'Task request ' + decision, message: '"' + task.title + '" was ' + decision + '.',
+    actionUrl: '/dashboard/tasks', metadata: { taskId: task.id },
+  }, actor, context).catch(function() {});
 }
 
 async function updateTask(taskId, input, user, context) {
   var before = await getTask(taskId);
+  assertStaffCanModify(before, user);
   var payload = await normalizePayload(input || {}, false);
   await db.query(
     `UPDATE tasks
@@ -389,7 +490,7 @@ async function updateTask(taskId, input, user, context) {
 }
 
 async function updateStatus(taskId, status, user, context) {
-  await getTask(taskId);
+  assertStaffCanModify(await getTask(taskId), user);
   var normalized = safeStatus(status, null);
   if (!normalized) fail(400, 'VALIDATION_ERROR', 'Status is invalid.');
   await db.query(
@@ -467,6 +568,7 @@ async function moveTasks(input, user, context) {
 
 async function deleteTask(taskId, user, context) {
   var task = await getTask(taskId);
+  assertStaffCanModify(task, user);
   await db.query(
     `UPDATE tasks
      SET deleted_at = UTC_TIMESTAMP(), updated_by = :userId
@@ -505,4 +607,6 @@ module.exports = {
   updateStatus: updateStatus,
   moveTasks: moveTasks,
   deleteTask: deleteTask,
+  approveRequest: approveRequest,
+  rejectRequest: rejectRequest,
 };

@@ -222,12 +222,14 @@ export function TaskDetailModal({
   projectOptions,
   assigneeOptions,
   onUpdate,
+  readOnly = false,
 }: {
   state: ReturnType<typeof useOverlayState>;
   task: Task | null;
   projectOptions: TaskProjectOption[];
   assigneeOptions: TaskAssigneeOption[];
   onUpdate: (task: Task) => Promise<void> | void;
+  readOnly?: boolean;
 }) {
   const assigneeSelect = useMemo(
     () => buildAssigneeSelect(assigneeOptions),
@@ -299,7 +301,13 @@ export function TaskDetailModal({
                 </ModalHeading>
               </ModalHeader>
 
-              <ModalBody className="max-h-[72vh] space-y-5 overflow-y-auto">
+              <ModalBody className="max-h-[72vh] overflow-y-auto">
+               <fieldset disabled={readOnly} className="m-0 space-y-5 border-0 p-0">
+                {readOnly && (
+                  <p className="rounded-md bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600">
+                    View only — you don&apos;t have permission to edit this task.
+                  </p>
+                )}
                 <Controller
                   control={form.control}
                   name="projectId"
@@ -531,15 +539,18 @@ export function TaskDetailModal({
                     </div>
                   </div>
                 )}
+               </fieldset>
               </ModalBody>
 
               <ModalFooter className="flex justify-end gap-2">
                 <Button type="button" variant="tertiary" onPress={state.close}>
-                  Cancel
+                  {readOnly ? "Close" : "Cancel"}
                 </Button>
-                <Button type="submit" variant="primary">
-                  Save Changes
-                </Button>
+                {!readOnly && (
+                  <Button type="submit" variant="primary">
+                    Save Changes
+                  </Button>
+                )}
               </ModalFooter>
             </form>
           </ModalDialog>

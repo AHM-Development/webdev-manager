@@ -1,4 +1,4 @@
-import type { Task, TaskStatus } from "@/components/tasks/data";
+import type { Task, TaskRequestStatus, TaskStatus } from "@/components/tasks/data";
 
 import { apiClient } from "./client";
 import { endpoints } from "./endpoints";
@@ -9,7 +9,7 @@ export type TaskAssignee = {
   id: string;
   name: string;
   email: string;
-  role: "superadmin" | "developer";
+  role: "superadmin" | "developer" | "staff";
   avatarUrl: string | null;
 };
 
@@ -24,12 +24,32 @@ export async function listTasks(filters?: {
   projectId?: string;
   status?: TaskStatus;
   assignee?: string;
+  requestStatus?: TaskRequestStatus;
+  requests?: boolean;
 }) {
   const { data } = await apiClient.get<{ tasks: Task[] }>(
     endpoints.tasks.list,
     { params: filters }
   );
   return data.tasks;
+}
+
+/** Task requests — the server scopes Staff to their own; SA/Dev see all. */
+export async function listTaskRequests() {
+  const { data } = await apiClient.get<{ tasks: Task[] }>(endpoints.tasks.list, {
+    params: { requests: true },
+  });
+  return data.tasks;
+}
+
+export async function approveTaskRequest(taskId: string) {
+  const { data } = await apiClient.post<{ task: Task }>(endpoints.tasks.approve(taskId));
+  return data.task;
+}
+
+export async function rejectTaskRequest(taskId: string) {
+  const { data } = await apiClient.post<{ task: Task }>(endpoints.tasks.reject(taskId));
+  return data.task;
 }
 
 export async function listMyTasks(filters?: { projectId?: string }) {

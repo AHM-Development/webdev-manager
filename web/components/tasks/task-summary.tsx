@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@heroui/react";
-import { ArrowUpRight, ChevronDown, Flag } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Flag, Plus } from "lucide-react";
 import { useState } from "react";
 
 import type { Project } from "@/components/projects/data";
@@ -32,18 +32,33 @@ const priorityIconClass: Record<TaskPriority, string> = {
   Low: "bg-slate-50 text-slate-500 ring-slate-100",
 };
 
+/** Read-only status pill, used when the viewer can't change a task's status. */
+function StatusBadge({ status }: { status: TaskStatus }) {
+  return (
+    <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+      {status}
+    </span>
+  );
+}
+
 export function TaskSummary({
   tasks,
   projects,
   onChangeStatus,
   onOpenProject,
   onOpenTask,
+  onAddTask,
+  addTaskLabel = "Add Task",
+  readOnly = false,
 }: {
   tasks: Task[];
   projects: Project[];
   onChangeStatus: (taskId: string, status: TaskStatus) => void;
   onOpenProject: (projectId: string) => void;
   onOpenTask: (task: Task) => void;
+  onAddTask?: () => void;
+  addTaskLabel?: string;
+  readOnly?: boolean;
 }) {
   const [statusFilter, setStatusFilter] = useState<string>("In Progress");
   const [openProjects, setOpenProjects] = useState<Set<string>>(
@@ -89,6 +104,11 @@ export function TaskSummary({
           {statusFilter === "all" ? "All tasks" : statusFilter} — by Assignee
         </h2>
         <div className="flex items-center gap-3">
+          {onAddTask && (
+            <Button variant="primary" onPress={onAddTask}>
+              <Plus className="h-4 w-4" /> {addTaskLabel}
+            </Button>
+          )}
           <SearchableFilter
             ariaLabel="Filter by status"
             value={statusFilter}
@@ -268,12 +288,16 @@ export function TaskSummary({
                                       </div>
 
                                       <div className="flex items-center">
-                                        <StatusSelect
-                                          status={task.status}
-                                          onChange={(status) =>
-                                            onChangeStatus(task.id, status)
-                                          }
-                                        />
+                                        {readOnly ? (
+                                          <StatusBadge status={task.status} />
+                                        ) : (
+                                          <StatusSelect
+                                            status={task.status}
+                                            onChange={(status) =>
+                                              onChangeStatus(task.id, status)
+                                            }
+                                          />
+                                        )}
                                       </div>
 
                                       <div className="flex items-center">

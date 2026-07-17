@@ -7,13 +7,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Project } from "@/components/projects/data";
 import { listProjects } from "@/libs/api/projects";
 import {
+  approveTaskRequest,
   createTask,
   listAssignees,
+  listTaskRequests,
   listTasks,
   moveTasks,
+  rejectTaskRequest,
   updateTask,
   updateTaskStatus,
 } from "@/libs/api/tasks";
+import { useAuth } from "@/libs/hooks/useAuth";
 import { notify } from "@/libs/notify";
 
 import {
@@ -26,6 +30,7 @@ import { KanbanBoard } from "./kanban-board";
 import { ProjectSwitcher } from "./project-switcher";
 import { TaskBoardHeader } from "./task-board-header";
 import { TaskDetailModal } from "./task-detail-modal";
+import { TaskRequests } from "./task-requests";
 import { TaskSummary } from "./task-summary";
 
 const RECENTS_KEY = "wpm:recent-projects";
@@ -103,16 +108,28 @@ function applyMove(
 export function TasksView() {
   const router = useRouter();
   const params = useSearchParams();
+  const { user } = useAuth();
   const switcher = useOverlayState();
   const addTask = useOverlayState();
   const detailState = useOverlayState();
-  const [tab, setTab] = useState<"summary" | "board">("summary");
+  const [tab, setTab] = useState<"summary" | "requests" | "board">("summary");
+
+  const role = user?.role;
+  const isSuperAdmin = role === "superadmin";
+  const isStaff = role === "staff";
+  const canReview = role === "superadmin" || role === "developer";
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [requests, setRequests] = useState<Task[]>([]);
   const [assignees, setAssignees] = useState<TaskAssigneeOption[]>([]);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Staff may edit only their own request while it's still pending.
+  const detailReadOnly = isStaff
+    ? !(activeTask?.requestedBy === user?.id && activeTask?.requestStatus === "pending")
+    : false;
 
   // Selected project comes from the URL (?project=id); default to the first.
   const requested = params.get("project");
@@ -154,13 +171,15 @@ export function TasksView() {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [projectRows, taskRows, assigneeRows] = await Promise.all([
+      const [projectRows, taskRows, assigneeRows, requestRows] = await Promise.all([
         listProjects(),
-        listTasks(),
+        listTasks({ requestStatus: "approved" }),
         listAssignees(),
+        listTaskRequests(),
       ]);
       setProjects(projectRows);
       setTasks(taskRows);
+      setRequests(requestRows);
       setAssignees(
         assigneeRows.map((member) => ({ id: member.id, name: member.name }))
       );
@@ -215,8 +234,40 @@ export function TasksView() {
 
   const handleCreate = useCallback(async (input: NewTaskInput) => {
     const created = await createTask(input);
-    setTasks((prev) => [created, ...prev]);
-    notify.success("Task created", { description: created.title });
+    if (created.requestStatus === "approved") {
+      setTasks((prev) => [created, ...prev]);
+      notify.success("Task created", { description: created.title });
+    } else {
+      setRequests((prev) => [created, ...prev]);
+      notify.success("Task request submitted", {
+        description: "A manager will review it shortly.",
+      });
+    }
+  }, []);
+
+  const handleApprove = useCallback(async (taskId: string) => {
+    try {
+      const updated = await approveTaskRequest(taskId);
+      setRequests((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      setTasks((prev) => [updated, ...prev.filter((t) => t.id !== updated.id)]);
+      notify.success("Request approved", { description: updated.title });
+    } catch (err) {
+      notify.error("Could not approve request", {
+        description: (err as Error).message ?? "Please try again.",
+      });
+    }
+  }, []);
+
+  const handleReject = useCallback(async (taskId: string) => {
+    try {
+      const updated = await rejectTaskRequest(taskId);
+      setRequests((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      notify.success("Request rejected", { description: updated.title });
+    } catch (err) {
+      notify.error("Could not reject request", {
+        description: (err as Error).message ?? "Please try again.",
+      });
+    }
   }, []);
 
   const handleChangeStatus = useCallback(
@@ -261,9 +312,8 @@ export function TasksView() {
       startDate: updatedTask.startDate,
       dueDate: updatedTask.dueDate,
     });
-    setTasks((prev) =>
-      prev.map((task) => (task.id === saved.id ? saved : task))
-    );
+    setTasks((prev) => prev.map((task) => (task.id === saved.id ? saved : task)));
+    setRequests((prev) => prev.map((task) => (task.id === saved.id ? saved : task)));
     setActiveTask(saved);
     notify.success("Task updated", { description: saved.title });
   }, []);
@@ -280,10 +330,14 @@ export function TasksView() {
     return () => window.removeEventListener("keydown", onKey);
   }, [switcher]);
 
+  // Board is Super-Admin only; everyone gets Summary + Requests.
   const TABS = [
     { id: "summary", label: "Task Summary" },
-    { id: "board", label: "Board" },
+    { id: "requests", label: "Task Requests" },
+    ...(isSuperAdmin ? [{ id: "board", label: "Board" } as const] : []),
   ] as const;
+
+  const addTaskLabel = isStaff ? "Request Task" : "Add Task";
 
   return (
     <div className="flex h-full flex-col">
@@ -310,12 +364,30 @@ export function TasksView() {
           <TaskSummary
             tasks={tasks}
             projects={projects}
+            readOnly={isStaff}
             onChangeStatus={handleChangeStatus}
             onOpenTask={openTask}
+            onAddTask={addTask.open}
+            addTaskLabel={addTaskLabel}
             onOpenProject={(id) => {
-              goTo(id);
-              setTab("board");
+              if (isSuperAdmin) {
+                goTo(id);
+                setTab("board");
+              }
             }}
+          />
+        </div>
+      ) : tab === "requests" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto pt-4">
+          <TaskRequests
+            requests={requests}
+            projects={projects}
+            canReview={canReview}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            onOpenTask={openTask}
+            onAddTask={addTask.open}
+            addTaskLabel={addTaskLabel}
           />
         </div>
       ) : isLoading ? (
@@ -375,6 +447,7 @@ export function TasksView() {
         projectOptions={projectOptions}
         assigneeOptions={assignees}
         onUpdate={handleUpdateTask}
+        readOnly={detailReadOnly}
       />
     </div>
   );

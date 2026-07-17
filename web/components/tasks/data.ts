@@ -38,7 +38,15 @@ export type Task = {
   websiteId?: string | null;
   reviewerUserId?: string | null;
   isCritical?: boolean;
+  // Task-request approval flow. Staff-created tasks start as "pending" requests.
+  requestStatus?: TaskRequestStatus;
+  requestedBy?: string | null;
+  requestedByName?: string | null;
+  reviewedByName?: string | null;
+  reviewedAt?: string | null;
 };
+
+export type TaskRequestStatus = "pending" | "approved" | "rejected";
 
 /** All task statuses, in workflow order (used for the status menu + column filter). */
 export const STATUSES: TaskStatus[] = [

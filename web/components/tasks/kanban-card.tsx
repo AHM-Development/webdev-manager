@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import { Flag, LayoutGrid } from "lucide-react";
+import { Flag } from "lucide-react";
 
 import { StatusSelect } from "./status-select";
 import { checklistProgress } from "./task-utils";
@@ -18,25 +18,16 @@ export function TaskKanbanCard({
   onChangeStatus,
   onOpenTask,
   showStatusControl = true,
-  projectTaskCount,
 }: {
   task: Task;
   onChangeStatus?: (taskId: string, status: TaskStatus) => void;
   onOpenTask: (task: Task) => void;
   showStatusControl?: boolean;
-  /** Total number of tasks in this card's project, shown on the card. */
-  projectTaskCount?: number;
 }) {
   const progress = checklistProgress(task);
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium text-gray-900">{task.title}</p>
-      {projectTaskCount != null && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-[#e8f5ff] px-2 py-0.5 text-[11px] font-semibold text-[#082a78]">
-          <LayoutGrid className="h-3 w-3" />
-          {projectTaskCount} {projectTaskCount === 1 ? "task" : "tasks"} in project
-        </span>
-      )}
       {task.dueDate && (
         <span className="block text-xs text-gray-400">{task.dueDate}</span>
       )}

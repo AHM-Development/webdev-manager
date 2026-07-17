@@ -46,7 +46,6 @@ export function KanbanBoard({
           key={`${projectId}-${col}`}
           assignee={col}
           tasks={tasksForColumn(tasks, col, knownAssignees)}
-          projectTaskCount={tasks.length}
           onMove={onMove}
           onChangeStatus={onChangeStatus}
           onOpenTask={onOpenTask}

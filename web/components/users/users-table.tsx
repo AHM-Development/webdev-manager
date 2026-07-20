@@ -149,6 +149,7 @@ function InviteUserModal({
   const [draft, setDraft] = useState<AppUser>(() => emptyInvitedUser());
   const [showErrors, setShowErrors] = useState(false);
   const [inviteLink, setInviteLink] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const set = <K extends keyof AppUser>(key: K, value: AppUser[K]) => {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -167,8 +168,17 @@ function InviteUserModal({
       email: draft.email.trim(),
       status: "Invited" as AppUserStatus,
     };
-    const url = await onInvite(invitedUser);
-    setInviteLink(url);
+    setSubmitting(true);
+    try {
+      const url = await onInvite(invitedUser);
+      setInviteLink(url);
+    } catch (err) {
+      notify.error("Could not create invite", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -279,9 +289,15 @@ function InviteUserModal({
               <Button type="button" variant="tertiary" onPress={state.close}>
                 Cancel
               </Button>
-              <Button type="button" variant="primary" onPress={sendInvite}>
+              <Button
+                type="button"
+                variant="primary"
+                onPress={sendInvite}
+                isDisabled={submitting}
+                isPending={submitting}
+              >
                 <Send className="h-4 w-4" />
-                Send Invite
+                {submitting ? "Sending…" : "Send Invite"}
               </Button>
             </ModalFooter>
           </ModalDialog>

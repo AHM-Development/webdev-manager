@@ -220,7 +220,14 @@ async function createInvite(input, actor, context) {
     '/invite/' +
     encodeURIComponent(token);
   var user = await getUserRow(userId);
-  var delivery = await mail.sendInviteEmail(user, inviteUrl);
+  // Email is best-effort: the invite + link are created regardless, so a missing
+  // or failing mailer never blocks inviting — the admin can copy the link.
+  var delivery;
+  try {
+    delivery = await mail.sendInviteEmail(user, inviteUrl);
+  } catch (err) {
+    delivery = { delivered: false, reason: (err && err.code) || 'MAIL_FAILED' };
+  }
 
   await activity.logActivity({
     userId: actor && actor.id,

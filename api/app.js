@@ -23,11 +23,14 @@ app.use(cors({
 app.use(logger('dev'));
 app.use(requestContext);
 app.use(express.json({
+  // Bulk project/credential imports post the parsed rows as JSON — the 100kb
+  // default is far too small. Matches the 10MB multer file-upload cap.
+  limit: '10mb',
   verify: function(req, res, buffer) {
     req.rawBody = buffer;
   }
 }));
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 

@@ -3,6 +3,7 @@
 import {
   Button,
   Chip,
+  Dropdown,
   Input,
   Table,
   TableBody,
@@ -14,8 +15,7 @@ import {
   useOverlayState,
 } from "@heroui/react";
 import { ChevronDown, Copy, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
 
 import {
   copyWebsiteCredentialPackage,
@@ -32,7 +32,7 @@ import { SearchableFilter } from "@/components/ui/searchable-filter";
 
 import { CredentialModal } from "./credential-modal";
 import { ImportCredentialsModal } from "./import-credentials-modal";
-import { namesFrom, type Credential } from "./data";
+import { type Credential } from "./data";
 
 const emptyOptions: WebsiteCredentialOptions = {
   projects: [],
@@ -53,91 +53,29 @@ function CopyMenu({
   onCopyUsername: () => void | Promise<void>;
   onCopyPassword: () => void | Promise<void>;
 }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const anchorRef = useRef<HTMLDivElement | null>(null);
-  const MENU_WIDTH = 160;
-  const items = [
-    { key: "all", label: "Copy all", fn: onCopyAll },
-    { key: "username", label: "Copy username", fn: onCopyUsername },
-    { key: "password", label: "Copy password", fn: onCopyPassword },
-  ];
-
-  const toggle = () => {
-    const el = anchorRef.current;
-    if (el && !open) {
-      const rect = el.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: Math.max(8, rect.right - MENU_WIDTH) });
-    }
-    setOpen((prev) => !prev);
-  };
-
-  // The table lives in an overflow-x scroll container, so the menu is portaled
-  // to the body and closes on any scroll/resize/Escape to stay anchored.
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
   return (
-    <div ref={anchorRef} className="inline-block">
-      <Button
-        size="sm"
-        variant="ghost"
+    <Dropdown>
+      <Dropdown.Trigger
         aria-label={label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onPress={toggle}
+        className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-gray-600 outline-none hover:bg-gray-100 data-[open=true]:bg-gray-100"
       >
         <Copy className="h-4 w-4" />
         <ChevronDown className="h-3.5 w-3.5" />
-      </Button>
-      {open &&
-        pos &&
-        createPortal(
-          <>
-            <button
-              type="button"
-              aria-hidden
-              tabIndex={-1}
-              className="fixed inset-0 z-40 cursor-default"
-              onClick={() => setOpen(false)}
-            />
-            <div
-              role="menu"
-              style={{ top: pos.top, left: pos.left, width: MENU_WIDTH }}
-              className="fixed z-50 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg"
-            >
-              {items.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  role="menuitem"
-                  className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                  onClick={() => {
-                    setOpen(false);
-                    void item.fn();
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </>,
-          document.body
-        )}
-    </div>
+      </Dropdown.Trigger>
+      <Dropdown.Popover className="min-w-40">
+        <Dropdown.Menu
+          onAction={(key) => {
+            if (key === "all") void onCopyAll();
+            else if (key === "username") void onCopyUsername();
+            else if (key === "password") void onCopyPassword();
+          }}
+        >
+          <Dropdown.Item id="all">Copy all</Dropdown.Item>
+          <Dropdown.Item id="username">Copy username</Dropdown.Item>
+          <Dropdown.Item id="password">Copy password</Dropdown.Item>
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown>
   );
 }
 
@@ -216,8 +154,6 @@ export function WebsiteUsersTable() {
   useEffect(() => {
     void loadData();
   }, []);
-
-  const names = namesFrom(credentials);
 
   const targetOptions = (() => {
     const seen = new Map<string, string>();
@@ -559,7 +495,6 @@ export function WebsiteUsersTable() {
         key={`${editing?.id ?? "new"}:${modal.isOpen ? "open" : "closed"}`}
         state={modal}
         credential={editing}
-        names={names}
         options={options}
         onSave={handleSave}
       />

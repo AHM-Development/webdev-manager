@@ -2,8 +2,11 @@
 
 import {
   Button,
+  ComboBox,
   Input,
   Label,
+  ListBox,
+  ListBoxItem,
   Modal,
   ModalBackdrop,
   ModalBody,
@@ -17,8 +20,6 @@ import {
   type useOverlayState,
 } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Controller, useForm } from "react-hook-form";
 
 import { PasswordField } from "@/components/ui/password";
@@ -38,138 +39,60 @@ function FieldError({ message }: { message?: string }) {
 
 function UserNameCombobox({
   value,
+  userId,
   onChange,
-  onBlur,
   users,
-  names,
   invalid,
 }: {
   value: string;
+  userId: string;
   onChange: (name: string, userId: string) => void;
-  onBlur: () => void;
   users: { id: string; name: string; email: string }[];
-  names: string[];
   invalid?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  const q = value.trim().toLowerCase();
-
-  const userMatches = users.filter(
-    (u) =>
-      !q ||
-      u.name.toLowerCase().includes(q) ||
-      u.email.toLowerCase().includes(q)
-  );
-  // Custom names already saved that don't belong to a registered user.
-  const userNameSet = new Set(users.map((u) => u.name.toLowerCase()));
-  const customMatches = names.filter(
-    (n) =>
-      !userNameSet.has(n.toLowerCase()) &&
-      n.toLowerCase().includes(q) &&
-      n.toLowerCase() !== q
-  );
-  const hasSuggestions = userMatches.length > 0 || customMatches.length > 0;
-
-  const place = () => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
-  };
-
-  // The modal body scrolls (overflow-y-auto), so the menu is portaled to the
-  // body and closes on scroll/resize to stay anchored to the input.
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
   return (
-    <div ref={wrapRef} className="relative">
-      <input
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value, ""); // typing = custom, clears the user link
-          place();
-          setOpen(true);
-        }}
-        onFocus={() => {
-          place();
-          setOpen(true);
-        }}
-        onBlur={() => {
-          onBlur();
-          setTimeout(() => setOpen(false), 150);
-        }}
-        placeholder="Select a user or type a custom name"
-        className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-blue-500 ${
-          invalid ? "border-red-400" : "border-gray-200"
-        }`}
-      />
-      {open &&
-        hasSuggestions &&
-        pos &&
-        createPortal(
-          <ul
-            style={{ top: pos.top, left: pos.left, width: pos.width }}
-            className="fixed z-60 max-h-64 overflow-y-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg"
-          >
-            {userMatches.map((u) => (
-              <li key={`u-${u.id}`}>
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onChange(u.name, u.id);
-                    setOpen(false);
-                  }}
-                  className="block w-full px-3 py-2 text-left hover:bg-gray-50"
-                >
-                  <span className="block text-sm text-gray-800">{u.name}</span>
-                  <span className="block text-xs text-gray-500">{u.email}</span>
-                </button>
-              </li>
-            ))}
-            {customMatches.length > 0 && userMatches.length > 0 && (
-              <li
-                aria-hidden
-                className="border-t border-gray-100 px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-gray-400"
-              >
-                Custom names
-              </li>
-            )}
-            {customMatches.map((n) => (
-              <li key={`n-${n}`}>
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onChange(n, "");
-                    setOpen(false);
-                  }}
-                  className="block w-full px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-50"
-                >
-                  {n}
-                </button>
-              </li>
-            ))}
-          </ul>,
-          document.body
-        )}
-    </div>
+    <ComboBox
+      aria-label="Name"
+      allowsCustomValue
+      menuTrigger="focus"
+      inputValue={value}
+      selectedKey={userId || null}
+      isInvalid={invalid}
+      // Typing = custom name, which clears the user link. Selecting an item is
+      // handled by onSelectionChange; with a controlled inputValue, React Aria
+      // does not fire this on selection, so the link is never clobbered.
+      onInputChange={(text) => onChange(text, "")}
+      onSelectionChange={(key) => {
+        if (key == null) return;
+        const picked = users.find((u) => u.id === String(key));
+        if (picked) onChange(picked.name, picked.id);
+      }}
+      className="w-full"
+    >
+      <ComboBox.InputGroup>
+        <Input
+          className="w-full"
+          placeholder="Select a user or type a custom name"
+        />
+        <ComboBox.Trigger />
+      </ComboBox.InputGroup>
+      <ComboBox.Popover>
+        <ListBox>
+          {users.map((u) => (
+            <ListBoxItem
+              key={u.id}
+              id={u.id}
+              textValue={`${u.name} ${u.email}`}
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm">{u.name}</p>
+                <p className="mt-0.5 truncate text-xs text-slate-500">{u.email}</p>
+              </div>
+            </ListBoxItem>
+          ))}
+        </ListBox>
+      </ComboBox.Popover>
+    </ComboBox>
   );
 }
 
@@ -192,13 +115,11 @@ function valuesFromCredential(
 export function CredentialModal({
   state,
   credential,
-  names,
   options,
   onSave,
 }: {
   state: ReturnType<typeof useOverlayState>;
   credential: Credential | null;
-  names: string[];
   options: WebsiteCredentialOptions;
   onSave: (cred: Credential) => void | Promise<void>;
 }) {
@@ -262,13 +183,12 @@ export function CredentialModal({
                       <label className="mb-1 block text-sm font-medium">Name</label>
                       <UserNameCombobox
                         value={field.value}
+                        userId={form.watch("userId")}
                         onChange={(name, userId) => {
                           field.onChange(name);
                           form.setValue("userId", userId);
                         }}
-                        onBlur={field.onBlur}
                         users={options.users}
-                        names={names}
                         invalid={!!fieldState.error}
                       />
                       <FieldError message={fieldState.error?.message} />

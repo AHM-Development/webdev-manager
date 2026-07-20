@@ -12,6 +12,7 @@ const activityPath = path.resolve(__dirname, '../auth/activity.service.js');
 const notificationsPath = path.resolve(__dirname, '../notifications/notifications.service.js');
 
 let taskRow = null; // row returned by getTask's SELECT
+let requestorRow = null; // row returned by resolveRequestor's SELECT
 const calls = [];
 const dispatched = [];
 
@@ -25,6 +26,7 @@ inject(dbPath, {
     if (/COALESCE\(MAX\(sort_order\)/.test(sql)) return [{ next_order: 100 }];
     if (/INSERT INTO tasks/.test(sql)) return { insertId: 7 };
     if (/FROM projects/.test(sql)) return [{ id: params.projectId || 3 }]; // assertProject
+    if (/email = :v OR name = :v/.test(sql)) return requestorRow ? [requestorRow] : []; // resolveRequestor
     if (/FROM users/.test(sql)) return []; // resolveAssignee lookups
     if (/^\s*SELECT/i.test(sql)) return [];
     return {};
@@ -42,7 +44,7 @@ const staff = { id: 5, name: 'Sam Staff', email: 's@x.co', role: 'staff' };
 const dev = { id: 2, name: 'Dev', email: 'd@x.co', role: 'developer' };
 const ctx = {};
 
-function reset() { calls.length = 0; dispatched.length = 0; taskRow = null; }
+function reset() { calls.length = 0; dispatched.length = 0; taskRow = null; requestorRow = null; }
 function baseTask(overrides) {
   return Object.assign({
     id: 7, project_id: 3, title: 'T', description: '', checklist: null, attachments: null,
@@ -123,4 +125,33 @@ test('listTasks with requests=true does NOT self-scope for a developer', async (
   await service.listTasks({ requests: true }, dev);
   const listCall = calls.find((c) => /FROM tasks t/.test(c.sql) && /requested_by IS NOT NULL/.test(c.sql));
   assert.doesNotMatch(listCall.sql, /requested_by = :requesterId/);
+});
+
+test('createTask on behalf of a requestor (by id) is a pending request owned by them', async () => {
+  reset();
+  taskRow = baseTask({ request_status: 'pending', requested_by: 9 });
+  // Actor is a developer, but the task is raised for requestor id 9.
+  await service.createTask({ projectId: '3', title: 'Fix form', requestedByUserId: 9 }, dev, ctx);
+  const insert = calls.find((c) => /INSERT INTO tasks/.test(c.sql));
+  assert.equal(insert.params.requestStatus, 'pending');
+  assert.equal(insert.params.requestedBy, 9);
+  assert.ok(dispatched.some((d) => d.input.type === 'task_request_submitted'));
+});
+
+test('createTask resolves a requestor by email/name to the owning user', async () => {
+  reset();
+  requestorRow = { id: 42 };
+  taskRow = baseTask({ request_status: 'pending', requested_by: 42 });
+  await service.createTask({ projectId: '3', title: 'Fix form', requestor: 'jane@x.co' }, dev, ctx);
+  const insert = calls.find((c) => /INSERT INTO tasks/.test(c.sql));
+  assert.equal(insert.params.requestedBy, 42);
+});
+
+test('createTask rejects an unknown requestor', async () => {
+  reset();
+  requestorRow = null; // resolveRequestor finds no user
+  await assert.rejects(
+    service.createTask({ projectId: '3', title: 'Fix form', requestor: 'ghost@x.co' }, dev, ctx),
+    (err) => err.code === 'REQUESTOR_UNKNOWN'
+  );
 });

@@ -344,11 +344,33 @@ function notifyReviewer(task, actor, context, prevReviewerId) {
   }
 }
 
+// Resolve a "requestor" (an email or full name) to an active user id.
+async function resolveRequestor(value) {
+  var v = String(value || '').trim();
+  if (!v) return null;
+  var rows = await db.query(
+    "SELECT id FROM users WHERE deleted_at IS NULL AND status = 'active' AND (email = :v OR name = :v) LIMIT 1",
+    { v: v }
+  );
+  return rows[0] ? rows[0].id : null;
+}
+
 async function createTask(input, user, context) {
-  var payload = await normalizePayload(input || {}, false);
+  input = input || {};
+  var payload = await normalizePayload(input, false);
   var sortOrder = await nextSortOrder(payload.projectId);
-  // Staff-created tasks are pending requests; SA/Dev create approved tasks.
-  var asRequest = isStaff(user);
+  // A task can be raised as a request ON BEHALF OF a named requester (e.g. Viktor
+  // creating for whoever asked) — it becomes pending and owned by that person, so
+  // it lands in the review queue. Otherwise: staff -> pending, SA/Dev -> approved.
+  var onBehalfOf = null;
+  if (input.requestedByUserId) {
+    onBehalfOf = Number(input.requestedByUserId);
+  } else if (input.requestor) {
+    onBehalfOf = await resolveRequestor(input.requestor);
+    if (!onBehalfOf) fail(400, 'REQUESTOR_UNKNOWN', 'Requestor "' + input.requestor + '" is not a registered active user.');
+  }
+  var asRequest = onBehalfOf != null || isStaff(user);
+  var requestedBy = onBehalfOf != null ? onBehalfOf : (isStaff(user) ? user.id : null);
   var result = await db.query(
     `INSERT INTO tasks
       (project_id, website_id, stage_id, title, description, checklist, attachments, status, priority,
@@ -382,7 +404,7 @@ async function createTask(input, user, context) {
       sortOrder: sortOrder,
       userId: user.id,
       requestStatus: asRequest ? 'pending' : 'approved',
-      requestedBy: asRequest ? user.id : null,
+      requestedBy: requestedBy,
     }
   );
   var task = await getTask(result.insertId);

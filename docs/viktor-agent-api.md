@@ -131,24 +131,32 @@ A proposal can only be confirmed **once**; reuse returns `409 AGENT_PROPOSAL_USE
 Call `GET /agent/actions` for the authoritative, complete list (args are passed
 in the `args` object; ids are strings).
 
-### AI-organized task creation (recommended)
+### AI-organized task requests (recommended)
 
-Instead of hand-building the title/checklist, pass a plain brief and let the AI
-organizer structure it. You only supply description + client (+ optional due
-date/assignee); it generates the title, description, and checklist.
+When a person asks you for a task, use `tasks.createOrganized`. Pass **who asked**
+(`requestor` — their email or full name) plus a plain brief; the organizer arranges
+it and it's saved as a **pending task request owned by that requestor**. It enters
+the review queue, and once a manager approves it, it shows on the assignee's board.
+
+- `requestor` is **required** (email or full name of a registered user) — this is
+  who the request is attributed to. Unknown → `400 REQUESTOR_UNKNOWN`; missing →
+  `400 REQUESTOR_REQUIRED`.
+- You supply the brief; the AI generates title/description/checklist. Any field you
+  pass explicitly (`title`, `checklist`, `priority`, `status`) overrides the AI.
 
 ```json
 POST /agent/propose
 { "actionKey": "tasks.createOrganized", "args": { "input": {
+    "requestor": "joel@alliedhealthmedia.co.uk",
     "description": "Contact form on the booking page isn't emailing submissions; also add a honeypot for spam.",
     "projectId": "25",
     "assignee": "Queenie",
     "dueDate": "2026-08-01"
 } } }
 ```
-Then `confirm` — the response `result` is the created task with the AI-generated
-`title` and `checklist`. (Requires the Task Organizer prompt to be configured in
-the app's Settings; otherwise you'll get `409 TASK_ORGANIZER_PROMPT_REQUIRED`.)
+Then `confirm` — the response `result` is the created **request** (status pending)
+with the AI-generated title/checklist. (Requires the Task Organizer prompt to be
+configured in the app's Settings; otherwise `409 TASK_ORGANIZER_PROMPT_REQUIRED`.)
 
 ## Errors
 

@@ -108,10 +108,17 @@ var ACTIONS = {
   'tasks.assignees': read(ALL, function() { return tasks.listAssignees(); }),
   'tasks.create': write(STAFF_WRITE, function(u, a, c) { return tasks.createTask(a.input || {}, u, c); },
     function(a) { return 'Create task "' + ((a.input && a.input.title) || 'Untitled') + '"'; }),
-  // AI-organized create: pass a plain brief + client (+ optional dueDate/assignee)
-  // and the task organizer generates the title, description, and checklist.
+  // AI-organized task request: a person asks Viktor for a task; the organizer
+  // arranges it and it's saved as a PENDING request attributed to that requestor,
+  // so it enters the review queue and (once approved) shows on the assignee's board.
+  // Pass the requestor (their email or full name) + a brief; provided fields win.
   'tasks.createOrganized': write(STAFF_WRITE, async function(u, a, c) {
     var i = a.input || {};
+    if (!i.requestor && !i.requestedByUserId) {
+      var e = new Error('A requestor (email or name of the person who asked) is required.');
+      e.status = 400; e.code = 'REQUESTOR_REQUIRED';
+      throw e;
+    }
     var organized = await taskOrganizer.organizeTask(
       { sourceText: i.description || i.brief || '', projectId: i.projectId },
       u, c
@@ -121,16 +128,19 @@ var ACTIONS = {
       projectId: i.projectId,
       title: i.title || draft.title,
       description: draft.description,
-      checklist: draft.checklist,
+      checklist: i.checklist || draft.checklist,
       attachments: draft.attachments,
       priority: i.priority || draft.priority,
-      status: draft.status,
+      status: i.status || draft.status,
       assigneeName: i.assignee || i.assigneeName,
       dueDate: i.dueDate,
+      requestor: i.requestor,
+      requestedByUserId: i.requestedByUserId,
     }, u, c);
   }, function(a) {
     var i = a.input || {};
-    return 'Create an AI-organized task' + (i.projectId ? ' for client ' + i.projectId : '') +
+    return 'Create a task request' + (i.requestor ? ' from ' + i.requestor : '') +
+      (i.projectId ? ' for client ' + i.projectId : '') +
       (i.description ? ': "' + String(i.description).slice(0, 80) + '"' : '');
   }),
   'tasks.update': write(STAFF_WRITE, function(u, a, c) { return tasks.updateTask(a.taskId, a.input || {}, u, c); },

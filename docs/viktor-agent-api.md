@@ -141,6 +141,9 @@ the review queue, and once a manager approves it, it shows on the assignee's boa
 - `requestor` is **required** (email or full name of a registered user) — this is
   who the request is attributed to. Unknown → `400 REQUESTOR_UNKNOWN`; missing →
   `400 REQUESTOR_REQUIRED`.
+- **With an `assignee`** the task **skips approval** and goes straight to that
+  developer's backlog. **Without an assignee** it stays a **pending request** in
+  the review queue for a manager to assign + approve.
 - You supply the brief; the AI generates title/description/checklist. Any field you
   pass explicitly (`title`, `checklist`, `priority`, `status`) overrides the AI.
 

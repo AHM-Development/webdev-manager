@@ -369,8 +369,24 @@ async function createTask(input, user, context) {
     onBehalfOf = await resolveRequestor(input.requestor);
     if (!onBehalfOf) fail(400, 'REQUESTOR_UNKNOWN', 'Requestor "' + input.requestor + '" is not a registered active user.');
   }
-  var asRequest = onBehalfOf != null || isStaff(user);
-  var requestedBy = onBehalfOf != null ? onBehalfOf : (isStaff(user) ? user.id : null);
+  var hasAssignee = !!payload.assigneeUserId ||
+    (payload.assigneeName && payload.assigneeName !== 'Unassigned');
+
+  var requestStatus;
+  var requestedBy;
+  if (onBehalfOf != null) {
+    // Raised on behalf of a requestor (e.g. Viktor). WITH an assignee it goes
+    // straight to that developer's backlog; WITHOUT one it waits for review.
+    requestStatus = hasAssignee ? 'approved' : 'pending';
+    requestedBy = onBehalfOf;
+  } else if (isStaff(user)) {
+    requestStatus = 'pending';
+    requestedBy = user.id;
+  } else {
+    requestStatus = 'approved';
+    requestedBy = null;
+  }
+  var asRequest = requestStatus === 'pending';
   var result = await db.query(
     `INSERT INTO tasks
       (project_id, website_id, stage_id, title, description, checklist, attachments, status, priority,
@@ -403,7 +419,7 @@ async function createTask(input, user, context) {
       dueDate: payload.dueDate,
       sortOrder: sortOrder,
       userId: user.id,
-      requestStatus: asRequest ? 'pending' : 'approved',
+      requestStatus: requestStatus,
       requestedBy: requestedBy,
     }
   );

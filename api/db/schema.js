@@ -409,12 +409,43 @@ async function ensureSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
-  await db.query(`
-    INSERT IGNORE INTO ai_prompt_settings
-      (prompt_key, name, system_prompt, user_prompt_template, model, temperature, max_tokens, enabled)
-    VALUES
-      ('task_organizer', 'Task Organizer', '', '', NULL, 0.20, 1400, 1)
-  `);
+  var TASK_ORGANIZER_SYSTEM = [
+    'You are a task organizer for a web development agency. Turn a raw task request into ONE well-structured task that matches the required JSON schema exactly.',
+    '',
+    'Rules:',
+    '- Title: concise and action-oriented (max ~80 characters); omit the client name unless it adds clarity.',
+    '- Description: clear and complete; preserve every material requirement from the request. Never invent requirements that are not present.',
+    '- Checklist: an ordered list of concrete, verifiable implementation steps.',
+    '- Priority: infer Low, Medium, or High from urgency and impact.',
+    '- Status: use Backlog unless the request clearly states work is already underway.',
+    '- Preserve any URLs as link attachments; treat URLs as references only and never claim to have opened them.',
+    '- Set needsReview true and confidence low when the request is vague or missing key details.',
+  ].join('\n');
+  var TASK_ORGANIZER_TEMPLATE = [
+    'Client: {{clientName}}',
+    '',
+    'Task request:',
+    '{{sourceText}}',
+    '',
+    'Organize the request above into a single task, following the rules.',
+  ].join('\n');
+
+  await db.query(
+    `INSERT IGNORE INTO ai_prompt_settings
+       (prompt_key, name, system_prompt, user_prompt_template, model, temperature, max_tokens, enabled)
+     VALUES ('task_organizer', 'Task Organizer', :system, :template, NULL, 0.20, 1400, 1)`,
+    { system: TASK_ORGANIZER_SYSTEM, template: TASK_ORGANIZER_TEMPLATE }
+  );
+
+  // Backfill the default prompt for existing installs where it is still blank —
+  // never overwrites a prompt an admin has customised.
+  await db.query(
+    `UPDATE ai_prompt_settings
+       SET system_prompt = :system, user_prompt_template = :template
+     WHERE prompt_key = 'task_organizer'
+       AND (system_prompt IS NULL OR system_prompt = '' OR user_prompt_template IS NULL OR user_prompt_template = '')`,
+    { system: TASK_ORGANIZER_SYSTEM, template: TASK_ORGANIZER_TEMPLATE }
+  );
 
   await db.query(`
     UPDATE ai_prompt_settings

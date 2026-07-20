@@ -155,3 +155,15 @@ test('createTask rejects an unknown requestor', async () => {
     (err) => err.code === 'REQUESTOR_UNKNOWN'
   );
 });
+
+test('createTask on behalf of a requestor WITH an assignee skips approval (goes to the board)', async () => {
+  reset();
+  taskRow = baseTask({ request_status: 'approved', requested_by: 9, assignee_name: 'Queenie' });
+  await service.createTask(
+    { projectId: '3', title: 'Fix form', requestedByUserId: 9, assigneeName: 'Queenie' }, dev, ctx
+  );
+  const insert = calls.find((c) => /INSERT INTO tasks/.test(c.sql));
+  assert.equal(insert.params.requestStatus, 'approved', 'assignee -> approved, no review');
+  assert.equal(insert.params.requestedBy, 9, 'still attributed to the requestor');
+  assert.ok(!dispatched.some((d) => d.input.type === 'task_request_submitted'), 'not a pending request');
+});

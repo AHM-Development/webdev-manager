@@ -394,10 +394,21 @@ async function importProjects(input, file, user, context) {
 
   var payloads = rowsToPayloads(sheet.rows, mapping);
   var imported = [];
+  var skipped = [];
   var errors = [];
 
   for (var index = 0; index < payloads.length; index += 1) {
     try {
+      // Idempotent re-import: skip a row whose client already exists (matched by
+      // name, case-insensitive) so running the same sheet twice never duplicates.
+      var dup = await db.query(
+        'SELECT id FROM projects WHERE deleted_at IS NULL AND LOWER(client_name) = LOWER(:name) LIMIT 1',
+        { name: payloads[index].clientName }
+      );
+      if (dup[0]) {
+        skipped.push({ row: index + 2, clientName: payloads[index].clientName });
+        continue;
+      }
       imported.push(await createProject(payloads[index], user, context, { lenient: true }));
     } catch (err) {
       errors.push({
@@ -412,10 +423,10 @@ async function importProjects(input, file, user, context) {
     eventType: 'projects.bulk_import',
     ip: context.ip,
     userAgent: context.userAgent,
-    metadata: { imported: imported.length, errors: errors.length },
+    metadata: { imported: imported.length, skipped: skipped.length, errors: errors.length },
   });
 
-  return { imported: imported, errors: errors };
+  return { imported: imported, skipped: skipped, errors: errors };
 }
 
 function optionsPayload(assignees) {

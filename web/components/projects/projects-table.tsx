@@ -629,13 +629,15 @@ export function ProjectsTable() {
     mapping: Record<string, string>;
   }) => {
     const result = await importProjects(payload);
+    const skippedCount = result.skipped?.length ?? 0;
+    const skippedNote = skippedCount ? ` ${skippedCount} skipped (already exist).` : "";
     if (result.errors.length) {
-      const message = `${result.imported.length} projects imported. ${result.errors.length} rows failed.`;
+      const message = `${result.imported.length} added. ${result.errors.length} failed.${skippedNote}`;
       setError(message);
       notify.warning("Import completed with issues", { description: message });
     } else {
       notify.success("Projects imported", {
-        description: `${result.imported.length} projects added.`,
+        description: `${result.imported.length} added.${skippedNote}`,
       });
     }
     setList((prev) => [...result.imported, ...prev]);

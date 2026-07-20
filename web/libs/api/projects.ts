@@ -87,6 +87,7 @@ export async function importProjects(payload: {
 }) {
   const { data } = await apiClient.post<{
     imported: Project[];
+    skipped: { row: number; clientName: string }[];
     errors: { row: number; message: string }[];
   }>(endpoints.projects.import, payload);
   return data;

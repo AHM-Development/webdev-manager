@@ -21,7 +21,7 @@ export const inviteRegistrationSchema = z
     dateOfBirth: dateString,
     gender: genderSchema,
     phoneE164: z.string().trim().min(7, "Phone number is required."),
-    discordId: z.string().trim().min(3, "Discord ID is required."),
+    discordId: z.string().trim().max(120, "Discord ID is too long.").optional(),
     password: securePasswordSchema,
     confirmPassword: z.string().min(1, "Confirm your password."),
   })
@@ -37,7 +37,7 @@ export const profileSchema = z.object({
   dateOfBirth: dateString,
   gender: genderSchema,
   phoneE164: z.string().trim().min(7, "Phone number is required."),
-  discordId: z.string().trim().min(3, "Discord ID is required."),
+  discordId: z.string().trim().max(120, "Discord ID is too long.").optional(),
 });
 
 export const profilePasswordSchema = z

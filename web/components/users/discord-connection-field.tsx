@@ -23,7 +23,7 @@ const statusContent: Partial<
 };
 
 export function DiscordConnectionField({
-  label = "Discord ID",
+  label = "Discord ID (optional)",
   defaultValue = "",
   value: controlledValue,
   onChange,

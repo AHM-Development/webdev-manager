@@ -41,9 +41,29 @@ function hashRefreshToken(token) {
   return security.sha256(token);
 }
 
+// Client-credentials API key. The `ahmagent_` prefix lets the agent middleware
+// route it to the key path (vs a JWT delegation token). Stored only as a hash.
+var API_KEY_PREFIX = 'ahmagent_';
+
+function newApiKey() {
+  return API_KEY_PREFIX + security.randomToken(40);
+}
+
+function isApiKey(token) {
+  return typeof token === 'string' && token.indexOf(API_KEY_PREFIX) === 0;
+}
+
+function hashApiKey(key) {
+  return security.sha256(key);
+}
+
 module.exports = {
   mintAccessToken: mintAccessToken,
   verifyAccessToken: verifyAccessToken,
   newRefreshToken: newRefreshToken,
   hashRefreshToken: hashRefreshToken,
+  newApiKey: newApiKey,
+  isApiKey: isApiKey,
+  hashApiKey: hashApiKey,
+  API_KEY_PREFIX: API_KEY_PREFIX,
 };

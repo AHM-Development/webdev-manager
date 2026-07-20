@@ -1212,6 +1212,27 @@ async function ensureSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
   );
 
+  // Client-credentials agent API keys (no user redirect). Each key acts AS a
+  // designated service-account user, so the role ceiling + allowlist + propose→
+  // confirm still apply. Only the sha256 hash is stored; keys are revocable.
+  await db.query(
+    `CREATE TABLE IF NOT EXISTS agent_api_keys (
+      id CHAR(36) NOT NULL PRIMARY KEY,
+      name VARCHAR(160) NOT NULL,
+      key_hash CHAR(64) NOT NULL,
+      user_id BIGINT UNSIGNED NOT NULL,
+      scope VARCHAR(120) NOT NULL DEFAULT 'agent:read agent:write',
+      created_by BIGINT UNSIGNED NULL,
+      last_used_at DATETIME NULL,
+      revoked_at DATETIME NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY agent_api_keys_hash_uk (key_hash),
+      KEY agent_api_keys_user_idx (user_id),
+      CONSTRAINT fk_agent_api_keys_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT fk_agent_api_keys_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+  );
+
   // Let the activity feed attribute actions to the AI agent.
   await db
     .query(

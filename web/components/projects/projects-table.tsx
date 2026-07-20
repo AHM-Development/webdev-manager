@@ -5,6 +5,7 @@ import {
   AvatarFallback,
   Button,
   Chip,
+  Input,
   ListBox,
   ListBoxItem,
   Select,
@@ -28,6 +29,7 @@ import {
   Upload,
   Eye,
   Plus,
+  Search,
   Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -402,6 +404,7 @@ export function ProjectsTable() {
   const [assignee, setAssignee] = useState(ALL);
   const [type, setType] = useState(ALL);
   const [status, setStatus] = useState(ALL);
+  const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"all" | ProjectPriority | "Churned">("all");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -455,16 +458,30 @@ export function ProjectsTable() {
     return names.map((n) => ({ key: n, label: n }));
   }, [list]);
 
-  const filtered = useMemo(
-    () =>
-      list.filter(
-        (p) =>
-          (assignee === ALL || p.assignee.name === assignee) &&
-          (type === ALL || p.type === type) &&
-          (status === ALL || p.status === status)
-      ),
-    [list, assignee, type, status]
-  );
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const matchesSearch = (p: Project) => {
+      if (!q) return true;
+      const haystack = [
+        p.clientName,
+        p.assignee.name,
+        p.type,
+        p.liveLink ?? "",
+        p.stagingLink ?? "",
+        ...(p.websites ?? []).flatMap((w) => [w.name, w.url]),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    };
+    return list.filter(
+      (p) =>
+        (assignee === ALL || p.assignee.name === assignee) &&
+        (type === ALL || p.type === type) &&
+        (status === ALL || p.status === status) &&
+        matchesSearch(p)
+    );
+  }, [list, assignee, type, status, search]);
 
   // Churned projects are excluded from the priority groups and shown separately.
   const priorityGroups = useMemo(
@@ -701,21 +718,33 @@ export function ProjectsTable() {
         </p>
       )}
 
-      {/* Priority tabs */}
-      <div className="app-tabbar flex w-fit flex-wrap gap-1">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`app-tab px-4 py-2 text-sm font-semibold ${
-              tab === t.id ? "app-tab-active" : "hover:bg-[#f4f7f6] hover:text-slate-950"
-            }`}
-          >
-            {t.label}
-            <span className="ml-1.5 text-xs text-gray-400">{t.count}</span>
-          </button>
-        ))}
+      {/* Priority tabs + search */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="app-tabbar flex w-fit flex-wrap gap-1">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`app-tab px-4 py-2 text-sm font-semibold ${
+                tab === t.id ? "app-tab-active" : "hover:bg-[#f4f7f6] hover:text-slate-950"
+              }`}
+            >
+              {t.label}
+              <span className="ml-1.5 text-xs text-gray-400">{t.count}</span>
+            </button>
+          ))}
+        </div>
+        <div className="relative w-full max-w-xs">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            aria-label="Search projects"
+            placeholder="Search projects…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="w-full pl-9"
+          />
+        </div>
       </div>
 
       <div className="space-y-5">

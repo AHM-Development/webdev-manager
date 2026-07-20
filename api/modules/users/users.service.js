@@ -136,6 +136,11 @@ async function createInvite(input, actor, context) {
   // A title only applies to Staff; ignore it for other roles.
   if (role !== roleConfig.ROLES.STAFF) title = null;
 
+  // Atomic invite: refuse before creating anything if we can't email it.
+  if (!mail.isConfigured()) {
+    fail(503, 'MAIL_NOT_CONFIGURED', 'Email delivery must be set up before you can invite users.');
+  }
+
   var existing = await db.query(
     'SELECT id, status FROM users WHERE email = :email AND deleted_at IS NULL LIMIT 1',
     { email: email }
@@ -144,6 +149,7 @@ async function createInvite(input, actor, context) {
     fail(409, 'EMAIL_EXISTS', 'A user with this email already exists.');
   }
 
+  var wasNewUser = !existing[0];
   var userId;
   if (existing[0]) {
     userId = existing[0].id;
@@ -220,13 +226,16 @@ async function createInvite(input, actor, context) {
     '/invite/' +
     encodeURIComponent(token);
   var user = await getUserRow(userId);
-  // Email is best-effort: the invite + link are created regardless, so a missing
-  // or failing mailer never blocks inviting — the admin can copy the link.
-  var delivery;
+  // The invite must be emailed to count — if the send fails, roll back so we
+  // never leave a dangling invite/user, and surface a clear error.
   try {
-    delivery = await mail.sendInviteEmail(user, inviteUrl);
+    await mail.sendInviteEmail(user, inviteUrl);
   } catch (err) {
-    delivery = { delivered: false, reason: (err && err.code) || 'MAIL_FAILED' };
+    await db.query('DELETE FROM user_invites WHERE id = :id', { id: inviteId }).catch(function() {});
+    if (wasNewUser) {
+      await db.query('DELETE FROM users WHERE id = :id', { id: userId }).catch(function() {});
+    }
+    fail(502, 'INVITE_EMAIL_FAILED', 'The invite could not be emailed. Check the email settings and try again.');
   }
 
   await activity.logActivity({
@@ -234,7 +243,7 @@ async function createInvite(input, actor, context) {
     eventType: 'users.invite_created',
     ip: context.ip,
     userAgent: context.userAgent,
-    metadata: { invitedUserId: String(userId), delivered: delivery.delivered },
+    metadata: { invitedUserId: String(userId), delivered: true },
   });
 
   return {
@@ -242,7 +251,7 @@ async function createInvite(input, actor, context) {
       id: inviteId,
       inviteUrl: inviteUrl,
       expiresAt: security.mysqlDate(expiresAt),
-      delivered: delivery.delivered,
+      delivered: true,
     },
     user: mapUser(user),
   };

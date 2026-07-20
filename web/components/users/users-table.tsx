@@ -410,15 +410,9 @@ export function UsersTable() {
       title: user.role === "Staff" && user.title ? titleToApi[user.title] : null,
     });
     setUsers((current) => [mapApiUser(result.user), ...current]);
-    if (result.invite.delivered) {
-      notify.success("Invite sent", {
-        description: `An invite email was sent to ${user.email}.`,
-      });
-    } else {
-      notify.warning("Invite created — email not sent", {
-        description: `Email delivery isn't set up yet. Copy the invite link below and send it to ${user.email}.`,
-      });
-    }
+    notify.success("Invite sent", {
+      description: `An invite email was sent to ${user.email}.`,
+    });
     return result.invite.inviteUrl;
   };
 

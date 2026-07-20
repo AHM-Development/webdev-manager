@@ -214,10 +214,16 @@ async function sendDigestEmail(user, digest) {
   return { delivered: true };
 }
 
+/** True when a mailer (SMTP or Google OAuth) is configured to actually send. */
+function isConfigured() {
+  return hasSmtpConfig() || hasGoogleOAuthConfig();
+}
+
 module.exports = {
   sendPasswordResetEmail: sendPasswordResetEmail,
   sendInviteEmail: sendInviteEmail,
   sendProfilePasswordOtpEmail: sendProfilePasswordOtpEmail,
   sendNotificationEmail: sendNotificationEmail,
   sendDigestEmail: sendDigestEmail,
+  isConfigured: isConfigured,
 };

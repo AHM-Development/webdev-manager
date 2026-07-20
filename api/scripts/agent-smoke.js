@@ -4,16 +4,18 @@
  * Viktor agent smoke test — exercises the OAuth delegation surface end-to-end
  * against a running API. Read-only by default; revoke and write tests are opt-in.
  *
- * The one manual step this can't do is the browser consent (login + Allow), which
- * mints the authorization code. So either:
- *   A) go through the consent page, grab the ?code= from the redirect, then run
- *      with --code, or
- *   B) if you already have an access token, run with --token.
+ * Three ways to provide the delegation:
+ *   A) --email + --password + --redirect  (AUTO — logs in and self-authorizes,
+ *      no browser needed; the redirect must be in VIKTOR_REDIRECT_URIS)
+ *   B) go through the consent page, grab the ?code= from the redirect, run --code
+ *   C) if you already have an access token, run --token
  *
  * Client id/secret and (optionally) the base URL default from api/.env, so on the
- * prod box you usually only pass --code/--redirect.
+ * prod box you usually only pass the login/redirect.
  *
  * Examples:
+ *   node scripts/agent-smoke.js --base https://host/api/v1 \
+ *     --email admin@host --password '...' --redirect https://viktor.host/oauth/callback --revoke
  *   node scripts/agent-smoke.js --base https://host/api/v1 \
  *     --code <authcode> --redirect https://viktor.host/oauth/callback
  *   node scripts/agent-smoke.js --base https://host/api/v1 --token <accessToken>
@@ -81,13 +83,35 @@ async function main() {
     console.error('Missing base URL. Pass --base https://host/api/v1 (or set PUBLIC_API_URL).');
     process.exit(2);
   }
-  if (!args.code && !args.token) {
-    console.error('Provide either --code <authcode> --redirect <uri>  or  --token <accessToken>.');
+  var autoLogin = !args.code && !args.token && args.email && args.password;
+  if (!args.code && !args.token && !autoLogin) {
+    console.error('Provide --email + --password + --redirect (auto), or --code + --redirect, or --token.');
     console.error('See the header of this file for usage.');
     process.exit(2);
   }
 
   console.log('Viktor smoke test against ' + BASE + '  (client: ' + CLIENT_ID + ')\n');
+
+  // 0. AUTO: log in as the human and self-authorize to mint the code (no browser).
+  if (autoLogin) {
+    console.log('0) Login + authorize as ' + args.email);
+    var login = await req('POST', '/auth/login', { body: { email: String(args.email), password: String(args.password) } });
+    if (login.status !== 200 || !login.json || !login.json.accessToken) {
+      bad('login', 'HTTP ' + login.status + ' ' + JSON.stringify(login.json));
+      return finish();
+    }
+    ok('login');
+    var authz = await req('POST', '/agent/oauth/authorize', {
+      token: login.json.accessToken,
+      body: { client_id: CLIENT_ID, redirect_uri: String(args.redirect || ''), scope: 'agent:read agent:write' },
+    });
+    if (authz.status !== 200 || !authz.json || !authz.json.code) {
+      bad('authorize', 'HTTP ' + authz.status + ' ' + JSON.stringify(authz.json) + ' (is --redirect in VIKTOR_REDIRECT_URIS?)');
+      return finish();
+    }
+    ok('authorize', 'got authorization code');
+    args.code = authz.json.code;
+  }
 
   var accessToken = args.token ? String(args.token) : null;
   var refreshToken = args['refresh-token'] ? String(args['refresh-token']) : null;

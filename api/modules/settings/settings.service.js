@@ -1,5 +1,47 @@
 var db = require('../../db/pool');
 var activity = require('../auth/activity.service');
+var mail = require('../auth/mail.service');
+
+function fail(status, code, message) {
+  var err = new Error(message);
+  err.status = status;
+  err.code = code;
+  throw err;
+}
+
+async function recordEmailTest(status) {
+  await db.query(
+    'UPDATE email_connectors SET last_test_status = :status, last_tested_at = UTC_TIMESTAMP() WHERE id = 1',
+    { status: status }
+  );
+}
+
+// Send a real test email to `to` and record the outcome. Surfaces the exact
+// failure reason (e.g. blocked SMTP) rather than hanging or silently passing.
+async function sendTestEmail(to, user, context) {
+  var recipient = String(to || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+    fail(400, 'VALIDATION_ERROR', 'Enter a valid recipient email address.');
+  }
+  try {
+    await mail.sendTestEmail(recipient);
+  } catch (err) {
+    await recordEmailTest('failed');
+    await activity.logActivity({
+      userId: user.id, eventType: 'settings.email_test_failed',
+      ip: context.ip, userAgent: context.userAgent,
+      metadata: { to: recipient, reason: (err && err.code) || 'SEND_FAILED' },
+    });
+    fail(err && err.status ? err.status : 502, (err && err.code) || 'EMAIL_TEST_FAILED',
+      (err && err.message) || 'The test email could not be sent.');
+  }
+  await recordEmailTest('ready');
+  await activity.logActivity({
+    userId: user.id, eventType: 'settings.email_test_sent',
+    ip: context.ip, userAgent: context.userAgent, metadata: { to: recipient },
+  });
+  return { delivered: true, to: recipient };
+}
 
 function mapWorkspace(row) {
   return {
@@ -218,6 +260,7 @@ module.exports = {
   connectGoogle: connectGoogle,
   disconnectGoogle: disconnectGoogle,
   testEmailConnector: testEmailConnector,
+  sendTestEmail: sendTestEmail,
   getAiPrompt: getAiPrompt,
   updateAiPrompt: updateAiPrompt,
 };

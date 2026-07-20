@@ -51,6 +51,7 @@ export const endpoints = {
     googleConnect: "/settings/email-connector/google/connect",
     googleDisconnect: "/settings/email-connector/google/disconnect",
     emailConnectorTest: "/settings/email-connector/test",
+    emailConnectorTestSend: "/settings/email-connector/test-send",
     aiPrompt: (promptKey: string) => `/settings/ai-prompts/${promptKey}`,
   },
   notifications: {

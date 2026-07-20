@@ -227,11 +227,35 @@ function isConfigured() {
   return hasSmtpConfig() || hasGoogleOAuthConfig();
 }
 
+/** Send a real test email to `to`. Throws on any send failure so the caller can
+ *  report the exact reason (unlike the app emails, this never degrades silently). */
+async function sendTestEmail(to) {
+  if (!isConfigured()) {
+    var err = new Error('Email delivery is not configured.');
+    err.status = 400;
+    err.code = 'MAIL_NOT_CONFIGURED';
+    throw err;
+  }
+  await getTransporter().sendMail({
+    from: env.mail.from,
+    to: to,
+    subject: 'AHM Web Manager — test email',
+    text: 'This is a test email from AHM Web Manager. If you received it, email delivery is working.',
+    html:
+      '<div style="font-family:Arial,Helvetica,sans-serif;color:#0c1728;max-width:520px">' +
+      '<h2 style="font-size:18px;margin:0 0 8px">Email delivery works ✅</h2>' +
+      '<p style="color:#45566f;line-height:1.5;margin:0">This is a test email from AHM Web Manager. ' +
+      'If you received it, your email connector is configured correctly.</p></div>',
+  });
+  return { delivered: true };
+}
+
 module.exports = {
   sendPasswordResetEmail: sendPasswordResetEmail,
   sendInviteEmail: sendInviteEmail,
   sendProfilePasswordOtpEmail: sendProfilePasswordOtpEmail,
   sendNotificationEmail: sendNotificationEmail,
   sendDigestEmail: sendDigestEmail,
+  sendTestEmail: sendTestEmail,
   isConfigured: isConfigured,
 };

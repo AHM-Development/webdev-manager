@@ -28,6 +28,7 @@ import {
   getEmailConnectorSettings,
   getAiPromptSettings,
   getWorkspaceSettings,
+  sendTestEmail,
   testEmailConnector,
   updateAiPromptSettings,
   updateEmailConnectorSettings,
@@ -332,6 +333,8 @@ export function SettingsView() {
   const [googleTestStatus, setGoogleTestStatus] =
     useState<GoogleTestStatus>("Not tested");
   const [discordTesting, setDiscordTesting] = useState(false);
+  const [testRecipient, setTestRecipient] = useState("");
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
 
   const {
     control,
@@ -525,6 +528,34 @@ export function SettingsView() {
       const message =
         err instanceof Error ? err.message : "Unable to test Google email connector.";
       notify.error("Google email test failed", { description: message });
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    const to = testRecipient.trim();
+    if (!to.includes("@")) {
+      notify.error("Enter a recipient", { description: "Type a valid email address to send the test to." });
+      return;
+    }
+    setSendingTestEmail(true);
+    try {
+      // Persist the connector fields first so the test uses what's on screen.
+      const values = getValues();
+      await updateEmailConnectorSettings({
+        clientId: values.googleClientId,
+        clientSecret: values.googleClientSecret || undefined,
+        redirectUri: values.googleRedirectUri,
+      });
+      await sendTestEmail(to);
+      setGoogleTestStatus("Ready");
+      notify.success("Test email sent", { description: `Delivered to ${to}. Check the inbox.` });
+    } catch (err) {
+      setGoogleTestStatus("Failed");
+      notify.error("Test email failed", {
+        description: err instanceof Error ? err.message : "Could not send the test email.",
+      });
+    } finally {
+      setSendingTestEmail(false);
     }
   };
 
@@ -827,6 +858,36 @@ export function SettingsView() {
             name="googleRedirectUri"
             label="Redirect URI"
           />
+        </div>
+
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Send a test email
+          </label>
+          <p className="mb-2 text-xs text-slate-500">
+            Sends a real email to confirm delivery is working.
+          </p>
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Input
+                type="email"
+                aria-label="Test email recipient"
+                placeholder="recipient@example.com"
+                value={testRecipient}
+                onChange={(event) => setTestRecipient(event.target.value)}
+                className="w-full"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onPress={handleSendTestEmail}
+              isDisabled={sendingTestEmail}
+              isPending={sendingTestEmail}
+            >
+              {sendingTestEmail ? "Sending…" : "Send test email"}
+            </Button>
+          </div>
         </div>
       </Section>
 

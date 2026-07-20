@@ -67,6 +67,14 @@ async function testEmailConnector(req, res, next) {
   }
 }
 
+async function sendTestEmail(req, res, next) {
+  try {
+    res.json(await service.sendTestEmail(req.body && req.body.to, req.user, context(req)));
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getAiPrompt(req, res, next) {
   try {
     res.json({ prompt: await service.getAiPrompt(req.params.promptKey) });
@@ -98,6 +106,7 @@ module.exports = {
   connectGoogle: connectGoogle,
   disconnectGoogle: disconnectGoogle,
   testEmailConnector: testEmailConnector,
+  sendTestEmail: sendTestEmail,
   getAiPrompt: getAiPrompt,
   updateAiPrompt: updateAiPrompt,
 };

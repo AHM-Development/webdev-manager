@@ -18,6 +18,7 @@ router.patch('/email-connector', controller.updateEmailConnector);
 router.post('/email-connector/google/connect', controller.connectGoogle);
 router.post('/email-connector/google/disconnect', controller.disconnectGoogle);
 router.post('/email-connector/test', controller.testEmailConnector);
+router.post('/email-connector/test-send', controller.sendTestEmail);
 
 router.get('/ai-prompts/:promptKey', controller.getAiPrompt);
 router.patch('/ai-prompts/:promptKey', controller.updateAiPrompt);

@@ -87,6 +87,15 @@ export async function testEmailConnector() {
   return data.connector;
 }
 
+/** Send a real test email to `to`. Resolves on success, rejects with the reason. */
+export async function sendTestEmail(to: string) {
+  const { data } = await apiClient.post<{ delivered: boolean; to: string }>(
+    endpoints.settings.emailConnectorTestSend,
+    { to }
+  );
+  return data;
+}
+
 export async function getAiPromptSettings(promptKey: string) {
   const { data } = await apiClient.get<{ prompt: AiPromptSettings }>(
     endpoints.settings.aiPrompt(promptKey)

@@ -62,12 +62,81 @@ function getTransporter() {
   return transporter;
 }
 
+// ---- Gmail API over HTTPS (port 443) ----
+// VPS hosts (e.g. Hetzner) commonly block outbound SMTP, so when Google OAuth is
+// configured we send through the Gmail REST API instead of SMTP. Reuses the same
+// client id / secret / refresh token; needs the Gmail API enabled on the project
+// and the https://mail.google.com/ scope on the refresh token.
+async function gmailAccessToken() {
+  var response = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: env.mail.googleClientId,
+      client_secret: env.mail.googleClientSecret,
+      refresh_token: env.mail.googleRefreshToken,
+      grant_type: 'refresh_token',
+    }).toString(),
+    signal: AbortSignal.timeout(15000),
+  });
+  var data = await response.json().catch(function() { return {}; });
+  if (!response.ok || !data.access_token) {
+    throw new Error('Google token refresh failed: ' + (data.error_description || data.error || response.status));
+  }
+  return data.access_token;
+}
+
+function encodeHeader(value) {
+  var text = String(value || '');
+  if (/^[\x00-\x7F]*$/.test(text)) return text;
+  return '=?UTF-8?B?' + Buffer.from(text, 'utf8').toString('base64') + '?=';
+}
+
+function buildRawMessage(opts) {
+  var lines = [
+    'From: ' + (opts.from || env.mail.from),
+    'To: ' + opts.to,
+    'Subject: ' + encodeHeader(opts.subject),
+    'MIME-Version: 1.0',
+    'Content-Type: ' + (opts.html ? 'text/html' : 'text/plain') + '; charset="UTF-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    Buffer.from(opts.html || opts.text || '', 'utf8').toString('base64'),
+  ];
+  return Buffer.from(lines.join('\r\n'), 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+async function sendViaGmailApi(opts) {
+  var token = await gmailAccessToken();
+  var response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ raw: buildRawMessage(opts) }),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!response.ok) {
+    var err = await response.json().catch(function() { return {}; });
+    throw new Error('Gmail API send failed: ' + ((err.error && err.error.message) || response.status));
+  }
+  return { delivered: true };
+}
+
+// Route a message through the Gmail API (if Google OAuth is set) or SMTP.
+async function deliver(mailOptions) {
+  if (hasGoogleOAuthConfig()) return sendViaGmailApi(mailOptions);
+  return getTransporter().sendMail(mailOptions);
+}
+
 async function sendPasswordResetEmail(user, resetUrl) {
   if (!hasSmtpConfig() && !hasGoogleOAuthConfig()) {
     return unavailable('Password reset link', user.email, resetUrl);
   }
 
-  await getTransporter().sendMail({
+  await deliver({
     from: env.mail.from,
     to: user.email,
     subject: 'Reset your AHM Web Manager password',
@@ -84,7 +153,7 @@ async function sendInviteEmail(user, inviteUrl) {
     return unavailable('Invite link', user.email, inviteUrl);
   }
 
-  await getTransporter().sendMail({
+  await deliver({
     from: env.mail.from,
     to: user.email,
     subject: 'You have been invited to AHM Web Manager',
@@ -103,7 +172,7 @@ async function sendProfilePasswordOtpEmail(user, otp) {
     return unavailable('Profile password OTP', user.email, otp);
   }
 
-  await getTransporter().sendMail({
+  await deliver({
     from: env.mail.from,
     to: user.email,
     subject: 'Your AHM Web Manager password change code',
@@ -147,7 +216,7 @@ async function sendNotificationEmail(user, notification) {
     ? '<p style="margin:20px 0"><a href="' + link + '" style="display:inline-block;background:#0b7de3;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600">Open in AHM Web Manager</a></p>'
     : '';
 
-  await getTransporter().sendMail({
+  await deliver({
     from: env.mail.from,
     to: user.email,
     subject: title,
@@ -200,7 +269,7 @@ async function sendDigestEmail(user, digest) {
     return '- ' + (item.title || 'Notification') + (item.message ? ': ' + item.message : '');
   });
 
-  await getTransporter().sendMail({
+  await deliver({
     from: env.mail.from,
     to: user.email,
     subject: title + ' (' + items.length + ')',
@@ -236,7 +305,7 @@ async function sendTestEmail(to) {
     err.code = 'MAIL_NOT_CONFIGURED';
     throw err;
   }
-  await getTransporter().sendMail({
+  await deliver({
     from: env.mail.from,
     to: to,
     subject: 'AHM Web Manager — test email',

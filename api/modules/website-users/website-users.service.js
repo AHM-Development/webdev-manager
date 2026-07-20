@@ -48,6 +48,8 @@ function rowToCredential(row, includePassword) {
   return {
     id: String(row.id),
     name: row.name,
+    userId: row.user_id ? String(row.user_id) : undefined,
+    userName: row.linked_user_name || undefined,
     projectId: row.project_id ? String(row.project_id) : undefined,
     projectName: projectName,
     websiteId: row.website_id ? String(row.website_id) : undefined,
@@ -68,10 +70,12 @@ async function queryCredentials(where, params, includePassword) {
     `SELECT wc.*,
             p.client_name AS project_name,
             pw.name AS website_name,
-            pw.url AS website_url
+            pw.url AS website_url,
+            u.name AS linked_user_name
      FROM website_credentials wc
      LEFT JOIN projects p ON p.id = wc.project_id
      LEFT JOIN project_websites pw ON pw.id = wc.website_id
+     LEFT JOIN users u ON u.id = wc.user_id
      WHERE ` + where + `
      ORDER BY wc.updated_at DESC, wc.id DESC`,
     params || {}
@@ -150,10 +154,27 @@ async function resolveTarget(input) {
   };
 }
 
+async function resolveUser(userId, name) {
+  var id = userId == null || userId === '' ? null : String(userId);
+  if (!id) return { userId: null, name: name };
+
+  var rows = await db.query(
+    'SELECT id, name FROM users WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+    { id: id }
+  );
+  if (!rows[0]) throw badRequest('Selected user does not exist.');
+  // Keep the provided name if present (allows a custom label for a real user),
+  // otherwise snapshot the user's current name.
+  return { userId: String(rows[0].id), name: name || rows[0].name };
+}
+
 async function normalizePayload(input, existing) {
   var name = String(input.name || '').trim();
   var username = String(input.username || '').trim();
   var password = input.password == null ? '' : String(input.password);
+
+  var resolvedUser = await resolveUser(input.userId, name);
+  name = String(resolvedUser.name || '').trim();
 
   if (!name) throw badRequest('Name is required.');
   if (!username) throw badRequest('Username is required.');
@@ -163,6 +184,7 @@ async function normalizePayload(input, existing) {
 
   return {
     name: name,
+    userId: resolvedUser.userId,
     projectId: target.projectId,
     websiteId: target.websiteId,
     externalSite: target.externalSite,
@@ -205,13 +227,14 @@ async function createCredential(input, user, context) {
   var payload = await normalizePayload(input, null);
   var result = await db.query(
     `INSERT INTO website_credentials
-      (name, project_id, website_id, external_site, environment, username,
+      (name, user_id, project_id, website_id, external_site, environment, username,
        password_encrypted, password_updated_at, note, created_by, updated_by, created_at)
      VALUES
-      (:name, :projectId, :websiteId, :externalSite, :environment, :username,
+      (:name, :linkedUserId, :projectId, :websiteId, :externalSite, :environment, :username,
        :passwordEncrypted, :passwordUpdatedAt, :note, :userId, :userId, :createdAt)`,
     {
       name: payload.name,
+      linkedUserId: payload.userId,
       projectId: payload.projectId,
       websiteId: payload.websiteId,
       externalSite: payload.externalSite,
@@ -241,6 +264,7 @@ async function updateCredential(credentialId, input, user, context) {
   await db.query(
     `UPDATE website_credentials
      SET name = :name,
+         user_id = :linkedUserId,
          project_id = :projectId,
          website_id = :websiteId,
          external_site = :externalSite,
@@ -254,6 +278,7 @@ async function updateCredential(credentialId, input, user, context) {
     {
       credentialId: credentialId,
       name: payload.name,
+      linkedUserId: payload.userId,
       projectId: payload.projectId,
       websiteId: payload.websiteId,
       externalSite: payload.externalSite,
@@ -435,6 +460,11 @@ async function getOptions() {
      WHERE deleted_at IS NULL
      ORDER BY name ASC`
   );
+  var userRows = await db.query(
+    `SELECT id, name, email FROM users
+     WHERE deleted_at IS NULL
+     ORDER BY name ASC`
+  );
 
   var projectMap = new Map();
   var websites = [];
@@ -456,6 +486,9 @@ async function getOptions() {
     projects: Array.from(projectMap.values()),
     websites: websites,
     names: nameRows.map(function(row) { return row.name; }),
+    users: userRows.map(function(row) {
+      return { id: String(row.id), name: row.name, email: row.email };
+    }),
     environments: ENVIRONMENTS,
   };
 }

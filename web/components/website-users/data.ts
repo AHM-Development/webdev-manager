@@ -3,6 +3,8 @@ export type CredEnv = "Live" | "Staging";
 export type Credential = {
   id: string;
   name: string; // company member the credential is granted to
+  userId?: string; // linked application user (undefined = custom/non-registered name)
+  userName?: string | null; // linked user's current name (for display)
   // Target is either a managed project (projectId) or an external site (externalSite).
   projectId?: string;
   projectName?: string | null;

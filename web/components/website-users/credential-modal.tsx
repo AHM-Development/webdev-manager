@@ -35,31 +35,46 @@ function FieldError({ message }: { message?: string }) {
   return <p className="mt-1 text-sm text-red-600">{message}</p>;
 }
 
-function NameCombobox({
+function UserNameCombobox({
   value,
   onChange,
   onBlur,
+  users,
   names,
   invalid,
 }: {
   value: string;
-  onChange: (v: string) => void;
+  onChange: (name: string, userId: string) => void;
   onBlur: () => void;
+  users: { id: string; name: string; email: string }[];
   names: string[];
   invalid?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const q = value.trim().toLowerCase();
-  const matches = names.filter(
-    (n) => n.toLowerCase().includes(q) && n.toLowerCase() !== q
+
+  const userMatches = users.filter(
+    (u) =>
+      !q ||
+      u.name.toLowerCase().includes(q) ||
+      u.email.toLowerCase().includes(q)
   );
+  // Custom names already saved that don't belong to a registered user.
+  const userNameSet = new Set(users.map((u) => u.name.toLowerCase()));
+  const customMatches = names.filter(
+    (n) =>
+      !userNameSet.has(n.toLowerCase()) &&
+      n.toLowerCase().includes(q) &&
+      n.toLowerCase() !== q
+  );
+  const hasSuggestions = userMatches.length > 0 || customMatches.length > 0;
 
   return (
     <div className="relative">
       <input
         value={value}
         onChange={(e) => {
-          onChange(e.target.value);
+          onChange(e.target.value, ""); // typing = custom, clears the user link
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
@@ -67,23 +82,47 @@ function NameCombobox({
           onBlur();
           setTimeout(() => setOpen(false), 120);
         }}
-        placeholder="Type a new name or select existing"
+        placeholder="Select a user or type a custom name"
         className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-blue-500 ${
           invalid ? "border-red-400" : "border-gray-200"
         }`}
       />
-      {open && matches.length > 0 && (
-        <ul className="absolute z-20 mt-1 max-h-44 w-full overflow-y-auto rounded-md border border-gray-200 bg-white shadow-md">
-          {matches.map((n) => (
-            <li key={n}>
+      {open && hasSuggestions && (
+        <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-gray-200 bg-white shadow-md">
+          {userMatches.map((u) => (
+            <li key={`u-${u.id}`}>
               <button
                 type="button"
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  onChange(n);
+                  onChange(u.name, u.id);
                   setOpen(false);
                 }}
-                className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+              >
+                <span className="block text-sm text-gray-800">{u.name}</span>
+                <span className="block text-xs text-gray-500">{u.email}</span>
+              </button>
+            </li>
+          ))}
+          {customMatches.length > 0 && userMatches.length > 0 && (
+            <li
+              aria-hidden
+              className="border-t border-gray-100 px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-gray-400"
+            >
+              Custom names
+            </li>
+          )}
+          {customMatches.map((n) => (
+            <li key={`n-${n}`}>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onChange(n, "");
+                  setOpen(false);
+                }}
+                className="block w-full px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-50"
               >
                 {n}
               </button>
@@ -102,6 +141,7 @@ function valuesFromCredential(
 ): CredentialFormValues {
   return {
     name: credential?.name ?? "",
+    userId: credential?.userId ?? "",
     projectId: credential?.projectId ?? "",
     websiteId: credential?.websiteId ?? "",
     username: credential?.username ?? "",
@@ -146,6 +186,7 @@ export function CredentialModal({
       await onSave({
         id: credential?.id ?? `c-${Date.now()}`,
         name: values.name.trim(),
+        userId: values.userId || undefined,
         projectId: values.projectId,
         websiteId: values.websiteId || undefined,
         environment: credential?.environment ?? "Live",
@@ -180,10 +221,14 @@ export function CredentialModal({
                   render={({ field, fieldState }) => (
                     <div>
                       <label className="mb-1 block text-sm font-medium">Name</label>
-                      <NameCombobox
+                      <UserNameCombobox
                         value={field.value}
-                        onChange={field.onChange}
+                        onChange={(name, userId) => {
+                          field.onChange(name);
+                          form.setValue("userId", userId);
+                        }}
                         onBlur={field.onBlur}
+                        users={options.users}
                         names={names}
                         invalid={!!fieldState.error}
                       />

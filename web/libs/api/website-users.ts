@@ -5,6 +5,7 @@ import { endpoints } from "./endpoints";
 
 export type WebsiteCredentialPayload = {
   name: string;
+  userId?: string;
   projectId?: string;
   websiteId?: string;
   externalSite?: string;
@@ -20,6 +21,7 @@ export type WebsiteCredentialOptions = {
   projects: { id: string; name: string }[];
   websites: { id: string; projectId: string; name: string; url: string }[];
   names: string[];
+  users: { id: string; name: string; email: string }[];
   environments: Credential["environment"][];
 };
 

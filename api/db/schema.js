@@ -544,6 +544,7 @@ async function ensureSchema() {
     CREATE TABLE IF NOT EXISTS website_credentials (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
       name VARCHAR(190) NOT NULL,
+      user_id BIGINT UNSIGNED NULL,
       project_id BIGINT UNSIGNED NULL,
       website_id BIGINT UNSIGNED NULL,
       external_site VARCHAR(255) NULL,
@@ -559,6 +560,7 @@ async function ensureSchema() {
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (id),
       KEY website_credentials_name_idx (name),
+      KEY website_credentials_user_idx (user_id),
       KEY website_credentials_project_idx (project_id),
       KEY website_credentials_website_idx (website_id),
       KEY website_credentials_external_idx (external_site),
@@ -570,9 +572,19 @@ async function ensureSchema() {
       CONSTRAINT website_credentials_created_by_fk FOREIGN KEY (created_by)
         REFERENCES users(id) ON DELETE SET NULL,
       CONSTRAINT website_credentials_updated_by_fk FOREIGN KEY (updated_by)
+        REFERENCES users(id) ON DELETE SET NULL,
+      CONSTRAINT website_credentials_user_fk FOREIGN KEY (user_id)
         REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // Link credentials to a registered application user (nullable = custom name).
+  await alterIgnoreDuplicate(
+    'ALTER TABLE website_credentials ADD COLUMN user_id BIGINT UNSIGNED NULL AFTER name'
+  );
+  await alterIgnoreDuplicate(
+    'ALTER TABLE website_credentials ADD KEY website_credentials_user_idx (user_id)'
+  );
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS issues (

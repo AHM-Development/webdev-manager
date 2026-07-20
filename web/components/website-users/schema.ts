@@ -4,6 +4,7 @@ export function credentialFormSchema(isEdit: boolean) {
   return z
     .object({
       name: z.string().trim().min(1, "Name is required"),
+      userId: z.string(),
       projectId: z.string().min(1, "Client is required"),
       websiteId: z.string(),
       username: z.string().trim().min(1, "Username is required"),

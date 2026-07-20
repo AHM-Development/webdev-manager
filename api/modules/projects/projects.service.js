@@ -27,7 +27,20 @@ function validateUrl(value, field) {
   }
 }
 
-function normalizePayload(input) {
+// Tolerant URL for bulk import: never throws — prepends https:// to a bare
+// domain, and returns '' for anything that still isn't a URL (so the row can
+// still import without that link rather than failing the whole batch).
+function lenientUrl(value) {
+  var raw = String(value || '').trim();
+  if (!raw) return '';
+  try { return new URL(raw).toString(); } catch (e) { /* try with scheme */ }
+  try { return new URL('https://' + raw).toString(); } catch (e) { /* give up */ }
+  return '';
+}
+
+// `lenient` (bulk import) never rejects a row for a bad/missing URL or a
+// website-less project — it salvages what it can so legacy data imports whole.
+function normalizePayload(input, lenient) {
   var clientName = String(input.clientName || '').trim();
   if (!clientName) throw badRequest('Client name is required.');
 
@@ -35,13 +48,13 @@ function normalizePayload(input) {
   websites = websites
     .map(function(website, index) {
       var name = String(website.name || '').trim() || 'Website ' + (index + 1);
-      var url = validateUrl(website.url, 'Website URL');
+      var url = lenient ? lenientUrl(website.url) : validateUrl(website.url, 'Website URL');
       if (!url) return null;
       return { name: name, url: url };
     })
     .filter(Boolean);
 
-  if (!websites.length) throw badRequest('Add at least one website/domain.');
+  if (!websites.length && !lenient) throw badRequest('Add at least one website/domain.');
 
   return {
     clientName: clientName,
@@ -49,7 +62,7 @@ function normalizePayload(input) {
     assigneeName: String(input.assigneeName || input.assignee || '').trim() || 'Unassigned',
     status: options.normalizeOption(input.status, options.PROJECT_STATUSES, 'In Progress'),
     priority: options.normalizeOption(input.priority, options.PROJECT_PRIORITIES, 'Medium'),
-    figmaLink: validateUrl(input.figmaLink, 'Figma link') || null,
+    figmaLink: (lenient ? lenientUrl(input.figmaLink) : validateUrl(input.figmaLink, 'Figma link')) || null,
     domainManagement: options.normalizeOption(
       input.domainManagement,
       options.DOMAIN_MANAGEMENT_OPTIONS,
@@ -195,9 +208,14 @@ async function replaceWebsites(projectId, websites) {
   }
 }
 
-async function createProject(input, user, context) {
-  var payload = normalizePayload(input);
-  await assertRegisteredAssignee(payload.assigneeName);
+async function createProject(input, user, context, options) {
+  options = options || {};
+  var payload = normalizePayload(input, options.lenient);
+  // Bulk import keeps the raw assignee name even if that person isn't a user
+  // yet; the interactive create form still enforces a registered assignee.
+  if (!options.lenient) {
+    await assertRegisteredAssignee(payload.assigneeName);
+  }
   var result = await db.query(
     `INSERT INTO projects
       (client_name, type, assignee_name, status, priority, figma_link,
@@ -380,7 +398,7 @@ async function importProjects(input, file, user, context) {
 
   for (var index = 0; index < payloads.length; index += 1) {
     try {
-      imported.push(await createProject(payloads[index], user, context));
+      imported.push(await createProject(payloads[index], user, context, { lenient: true }));
     } catch (err) {
       errors.push({
         row: index + 2,

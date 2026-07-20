@@ -30,8 +30,16 @@ function unavailable(kind, recipient, secret) {
 function getTransporter() {
   if (transporter) return transporter;
 
+  // Fail fast instead of hanging forever if the SMTP host is unreachable
+  // (e.g. a VPS with outbound SMTP ports blocked).
+  var timeouts = {
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
+  };
+
   transporter = hasGoogleOAuthConfig()
-    ? nodemailer.createTransport({
+    ? nodemailer.createTransport(Object.assign({
         service: 'gmail',
         auth: {
           type: 'OAuth2',
@@ -40,8 +48,8 @@ function getTransporter() {
           clientSecret: env.mail.googleClientSecret,
           refreshToken: env.mail.googleRefreshToken,
         },
-      })
-    : nodemailer.createTransport({
+      }, timeouts))
+    : nodemailer.createTransport(Object.assign({
         host: env.mail.host,
         port: env.mail.port,
         secure: env.mail.secure,
@@ -49,7 +57,7 @@ function getTransporter() {
           user: env.mail.user,
           pass: env.mail.pass,
         },
-      });
+      }, timeouts));
 
   return transporter;
 }

@@ -4,8 +4,6 @@ import {
   Button,
   Input,
   Label,
-  ListBox,
-  ListBoxItem,
   Modal,
   ModalBackdrop,
   ModalBody,
@@ -14,11 +12,6 @@ import {
   ModalFooter,
   ModalHeader,
   ModalHeading,
-  Select,
-  SelectIndicator,
-  SelectPopover,
-  SelectTrigger,
-  SelectValue,
   TextArea,
   TextField,
   type useOverlayState,
@@ -28,6 +21,7 @@ import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 import { PasswordField } from "@/components/ui/password";
+import { SearchableFilter } from "@/components/ui/searchable-filter";
 import type { WebsiteCredentialOptions } from "@/libs/api/website-users";
 
 import type { Credential } from "./data";
@@ -104,16 +98,12 @@ function NameCombobox({
 const today = () => new Date().toISOString().slice(0, 10);
 
 function valuesFromCredential(
-  credential: Credential | null,
-  options: WebsiteCredentialOptions
+  credential: Credential | null
 ): CredentialFormValues {
   return {
     name: credential?.name ?? "",
-    targetKind: credential?.externalSite ? "external" : "project",
-    projectId: credential?.projectId ?? options.projects[0]?.id ?? "",
+    projectId: credential?.projectId ?? "",
     websiteId: credential?.websiteId ?? "",
-    externalSite: credential?.externalSite ?? "",
-    environment: credential?.environment ?? "Live",
     username: credential?.username ?? "",
     password: credential?.password ?? "",
     note: credential?.note ?? "",
@@ -136,24 +126,29 @@ export function CredentialModal({
   const isEdit = !!credential;
   const form = useForm<CredentialFormValues>({
     resolver: zodResolver(credentialFormSchema(isEdit)),
-    defaultValues: valuesFromCredential(credential, options),
+    defaultValues: valuesFromCredential(credential),
   });
 
-  const targetKind = form.watch("targetKind");
   const projectId = form.watch("projectId");
-  const websiteId = form.watch("websiteId");
-  const environment = form.watch("environment");
+
+  const clientOptions = options.projects.map((p) => ({ key: p.id, label: p.name }));
+  const websiteOptions = options.websites
+    .filter((site) => site.projectId === projectId)
+    .map((site) => ({ key: site.id, label: site.name, description: site.url }));
 
   const submit = form.handleSubmit(async (values) => {
-    const isExternal = values.targetKind === "external";
+    // Website is required whenever the selected client has saved websites.
+    if (websiteOptions.length > 0 && !values.websiteId) {
+      form.setError("websiteId", { type: "custom", message: "Website is required" });
+      return;
+    }
     try {
       await onSave({
         id: credential?.id ?? `c-${Date.now()}`,
         name: values.name.trim(),
-        projectId: isExternal ? undefined : values.projectId,
-        websiteId: isExternal ? undefined : values.websiteId || undefined,
-        externalSite: isExternal ? values.externalSite.trim() : undefined,
-        environment: values.environment,
+        projectId: values.projectId,
+        websiteId: values.websiteId || undefined,
+        environment: credential?.environment ?? "Live",
         username: values.username.trim(),
         password: values.password || undefined,
         createdAt: credential?.createdAt ?? today(),
@@ -199,162 +194,59 @@ export function CredentialModal({
 
                 <Controller
                   control={form.control}
-                  name="targetKind"
-                  render={({ field }) => (
+                  name="projectId"
+                  render={({ field, fieldState }) => (
                     <div>
-                      <label className="mb-1 block text-sm font-medium">
-                        Credential for
-                      </label>
-                      <div className="inline-flex rounded-md border border-gray-200 p-0.5 text-sm">
-                        {(
-                          [
-                            { id: "project", label: "Managed project" },
-                            { id: "external", label: "External site" },
-                          ] as const
-                        ).map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => field.onChange(opt.id)}
-                            className={`rounded px-3 py-1.5 ${
-                              field.value === opt.id
-                                ? "bg-gray-900 text-white"
-                                : "text-gray-600 hover:bg-gray-100"
-                            }`}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
+                      <label className="mb-1 block text-sm font-medium">Client</label>
+                      <SearchableFilter
+                        ariaLabel="Client"
+                        value={field.value}
+                        options={clientOptions}
+                        onChange={(v) => {
+                          field.onChange(v);
+                          form.setValue("websiteId", "");
+                          form.clearErrors("websiteId");
+                        }}
+                        placeholder="Search a client..."
+                        searchPlaceholder="Search clients..."
+                        className="w-full"
+                        triggerClassName="w-full"
+                      />
+                      <FieldError message={fieldState.error?.message} />
                     </div>
                   )}
                 />
 
-                {targetKind === "project" ? (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <Controller
-                      control={form.control}
-                      name="projectId"
-                      render={({ field, fieldState }) => (
-                        <div>
-                          <label className="mb-1 block text-sm font-medium">
-                            Project
-                          </label>
-                          <Select
-                            aria-label="Project"
-                            selectedKey={field.value}
-                            onSelectionChange={(k) => {
-                              field.onChange(String(k));
-                              form.setValue("websiteId", "");
-                            }}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue>
-                                {options.projects.find((p) => p.id === field.value)
-                                  ?.name ?? "Select project"}
-                              </SelectValue>
-                              <SelectIndicator />
-                            </SelectTrigger>
-                            <SelectPopover>
-                              <ListBox>
-                                {options.projects.map((p) => (
-                                  <ListBoxItem key={p.id} id={p.id}>
-                                    {p.name}
-                                  </ListBoxItem>
-                                ))}
-                              </ListBox>
-                            </SelectPopover>
-                          </Select>
-                          <FieldError message={fieldState.error?.message} />
-                        </div>
-                      )}
-                    />
-
+                <Controller
+                  control={form.control}
+                  name="websiteId"
+                  render={({ field, fieldState }) => (
                     <div>
-                      <label className="mb-1 block text-sm font-medium">
-                        Website
-                      </label>
-                      <Controller
-                        control={form.control}
-                        name="environment"
-                        render={({ field }) => (
-                          <div className="mb-3 inline-flex rounded-md border border-gray-200 p-0.5 text-sm">
-                            {(["Live", "Staging"] as const).map((env) => (
-                              <button
-                                key={env}
-                                type="button"
-                                onClick={() => field.onChange(env)}
-                                className={`rounded px-3 py-1.5 ${
-                                  environment === env
-                                    ? "bg-gray-900 text-white"
-                                    : "text-gray-600 hover:bg-gray-100"
-                                }`}
-                              >
-                                {env}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      />
-                      <Controller
-                        control={form.control}
-                        name="websiteId"
-                        render={({ field }) => (
-                          <Select
-                            aria-label="Specific website"
-                            selectedKey={websiteId || "none"}
-                            onSelectionChange={(k) =>
-                              field.onChange(String(k) === "none" ? "" : String(k))
-                            }
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue>
-                                {websiteId
-                                  ? options.websites.find((site) => site.id === websiteId)
-                                      ?.name ?? "Select website"
-                                  : "No specific website"}
-                              </SelectValue>
-                              <SelectIndicator />
-                            </SelectTrigger>
-                            <SelectPopover>
-                              <ListBox>
-                                <ListBoxItem id="none">No specific website</ListBoxItem>
-                                {options.websites
-                                  .filter((site) => site.projectId === projectId)
-                                  .map((site) => (
-                                    <ListBoxItem key={site.id} id={site.id}>
-                                      {site.name}
-                                    </ListBoxItem>
-                                  ))}
-                              </ListBox>
-                            </SelectPopover>
-                          </Select>
-                        )}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <Controller
-                    control={form.control}
-                    name="externalSite"
-                    render={({ field, fieldState }) => (
-                      <TextField
-                        aria-label="External site"
-                        value={field.value}
-                        onChange={field.onChange}
-                        onBlur={field.onBlur}
-                        isInvalid={!!fieldState.error}
-                      >
-                        <Label>External site</Label>
-                        <Input
+                      <label className="mb-1 block text-sm font-medium">Website</label>
+                      {!projectId ? (
+                        <p className="rounded-md border border-dashed border-gray-200 px-3 py-2 text-sm text-gray-400">
+                          Select a client first
+                        </p>
+                      ) : websiteOptions.length === 0 ? (
+                        <p className="rounded-md border border-dashed border-gray-200 px-3 py-2 text-sm text-gray-500">
+                          No websites saved for this client
+                        </p>
+                      ) : (
+                        <SearchableFilter
+                          ariaLabel="Website"
+                          value={field.value}
+                          options={websiteOptions}
+                          onChange={field.onChange}
+                          placeholder="Select a website..."
+                          searchPlaceholder="Search websites..."
                           className="w-full"
-                          placeholder="e.g. Mailchimp or example.com"
+                          triggerClassName="w-full"
                         />
-                        <FieldError message={fieldState.error?.message} />
-                      </TextField>
-                    )}
-                  />
-                )}
+                      )}
+                      <FieldError message={fieldState.error?.message} />
+                    </div>
+                  )}
+                />
 
                 <Controller
                   control={form.control}

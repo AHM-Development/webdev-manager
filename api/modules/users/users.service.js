@@ -141,11 +141,13 @@ async function createInvite(input, actor, context) {
     fail(503, 'MAIL_NOT_CONFIGURED', 'Email delivery must be set up before you can invite users.');
   }
 
+  // Look up by email including soft-deleted rows — email is UNIQUE, so a
+  // previously deleted user still owns it and must be revived, not re-inserted.
   var existing = await db.query(
-    'SELECT id, status FROM users WHERE email = :email AND deleted_at IS NULL LIMIT 1',
+    'SELECT id, status, deleted_at FROM users WHERE email = :email LIMIT 1',
     { email: email }
   );
-  if (existing[0] && existing[0].status !== 'invited') {
+  if (existing[0] && !existing[0].deleted_at && existing[0].status !== 'invited') {
     fail(409, 'EMAIL_EXISTS', 'A user with this email already exists.');
   }
 
@@ -161,6 +163,7 @@ async function createInvite(input, actor, context) {
            role = :role,
            title = :title,
            status = 'invited',
+           deleted_at = NULL,
            invited_at = UTC_TIMESTAMP()
        WHERE id = :userId`,
       {

@@ -14,7 +14,16 @@ import {
   TableRow,
   useOverlayState,
 } from "@heroui/react";
-import { ChevronDown, Copy, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
+import {
+  ChevronDown,
+  Copy,
+  ExternalLink,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
@@ -77,6 +86,16 @@ function CopyMenu({
       </Dropdown.Popover>
     </Dropdown>
   );
+}
+
+// The site to open: the saved website URL, or an external site that looks like
+// a domain/URL. Returns null when there's nothing linkable.
+function credentialSiteHref(c: Credential): string | null {
+  const raw = (c.websiteUrl || c.externalSite || "").trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (/\.[a-z]{2,}/i.test(raw)) return `https://${raw}`; // bare domain
+  return null; // e.g. an external site named "Mailchimp"
 }
 
 function credentialProjectName(c: Credential, options: WebsiteCredentialOptions) {
@@ -370,7 +389,7 @@ export function WebsiteUsersTable() {
 
       <div className="app-table-shell overflow-x-auto">
         <Table aria-label="Website credentials">
-          <TableContent className="w-full min-w-280 table-fixed">
+          <TableContent className="w-full min-w-300 table-fixed">
             <TableHeader>
               <TableColumn id="name" isRowHeader className="w-[14%]">
                 Name
@@ -390,10 +409,10 @@ export function WebsiteUsersTable() {
               <TableColumn id="passwordUpdated" className="w-[13%]">
                 Password Health
               </TableColumn>
-              <TableColumn id="note" className="w-[10%]">
+              <TableColumn id="note" className="w-[8%]">
                 Note
               </TableColumn>
-              <TableColumn id="action" className="w-[12%]">
+              <TableColumn id="action" className="w-[14%]">
                 Action
               </TableColumn>
             </TableHeader>
@@ -458,6 +477,23 @@ export function WebsiteUsersTable() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
+                      {credentialSiteHref(c) && (
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="ghost"
+                          aria-label={`Open website for ${c.name} in a new tab`}
+                          onPress={() =>
+                            window.open(
+                              credentialSiteHref(c)!,
+                              "_blank",
+                              "noopener,noreferrer"
+                            )
+                          }
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      )}
                       <CopyMenu
                         label={`Copy credential for ${c.name}`}
                         onCopyAll={() => handleCopyAll(c)}

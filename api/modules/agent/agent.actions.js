@@ -19,6 +19,7 @@ var issues = require('../issues/issues.service');
 var health = require('../website-health/website-health.service');
 var clientLogs = require('../client-logs/client-logs.service');
 var insights = require('../insights/insights.service');
+var taskOrganizer = require('../ai/task-organizer.service');
 
 var ALL = roles.ALL_ROLES;
 var WRITE = roles.WRITE_ROLES;
@@ -107,6 +108,31 @@ var ACTIONS = {
   'tasks.assignees': read(ALL, function() { return tasks.listAssignees(); }),
   'tasks.create': write(STAFF_WRITE, function(u, a, c) { return tasks.createTask(a.input || {}, u, c); },
     function(a) { return 'Create task "' + ((a.input && a.input.title) || 'Untitled') + '"'; }),
+  // AI-organized create: pass a plain brief + client (+ optional dueDate/assignee)
+  // and the task organizer generates the title, description, and checklist.
+  'tasks.createOrganized': write(STAFF_WRITE, async function(u, a, c) {
+    var i = a.input || {};
+    var organized = await taskOrganizer.organizeTask(
+      { sourceText: i.description || i.brief || '', projectId: i.projectId },
+      u, c
+    );
+    var draft = organized.draft;
+    return tasks.createTask({
+      projectId: i.projectId,
+      title: i.title || draft.title,
+      description: draft.description,
+      checklist: draft.checklist,
+      attachments: draft.attachments,
+      priority: i.priority || draft.priority,
+      status: draft.status,
+      assigneeName: i.assignee || i.assigneeName,
+      dueDate: i.dueDate,
+    }, u, c);
+  }, function(a) {
+    var i = a.input || {};
+    return 'Create an AI-organized task' + (i.projectId ? ' for client ' + i.projectId : '') +
+      (i.description ? ': "' + String(i.description).slice(0, 80) + '"' : '');
+  }),
   'tasks.update': write(STAFF_WRITE, function(u, a, c) { return tasks.updateTask(a.taskId, a.input || {}, u, c); },
     function(a) { return 'Update task ' + a.taskId; }),
   'tasks.setStatus': write(STAFF_WRITE, function(u, a, c) { return tasks.updateStatus(a.taskId, a.status, u, c); },

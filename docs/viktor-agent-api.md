@@ -54,6 +54,29 @@ Response:
 ```
 Calling a **write** action here returns `400 AGENT_NOT_READ`.
 
+### Argument shapes (important)
+
+Args differ per action:
+- **Id/field actions** take fields at the top level of `args` — e.g.
+  `tasks.setStatus` → `{ "taskId": "123", "status": "Done" }`.
+- **Create/update actions** take their fields nested under an **`input`** object —
+  e.g. `tasks.create` → `{ "input": { "title": "…", … } }`. (A top-level `title`
+  is ignored, which is why a task can come out "Untitled".)
+
+`tasks.create` fields (all under `input`): `title` (required), `description`,
+`checklist` (`[{ "title": "…", "completed": false }]`), `projectId` (string),
+`assigneeName` (string, the person's name), `dueDate` (`YYYY-MM-DD`), `priority`
+(`Low|Medium|High`), `status` (`Backlog|In Progress|Review|Blocked|Done`).
+
+```json
+POST /agent/propose
+{ "actionKey": "tasks.create", "args": { "input": {
+    "title": "Fix contact form on booking page",
+    "description": "The form doesn't send…",
+    "projectId": "25", "assigneeName": "Queenie", "dueDate": "2026-08-01"
+} } }
+```
+
 ### `POST /agent/propose` — stage a write
 ```
 POST /agent/propose
@@ -99,6 +122,7 @@ A proposal can only be confirmed **once**; reuse returns `409 AGENT_PROPOSAL_USE
 | `projects.update` / `projects.setStatus` / `projects.setPriority` | write | Update a client |
 | `tasks.list` / `tasks.get` | read | Tasks |
 | `tasks.create` / `tasks.update` / `tasks.setStatus` / `tasks.move` | write | Manage tasks |
+| `tasks.createOrganized` | write | **Simplest create** — pass `input: { description, projectId, dueDate, assignee }` and the AI organizer generates the title/description/checklist. See below. |
 | `issues.list` / `issues.create` / `issues.setStatus` / `issues.addApplications` | read/write | Issue boards |
 | `clientLogs.overview` / `clientLogs.stages` | read | Client Logs |
 | `clientLogs.updateStage` / `clientLogs.addStageTask` | write | Client Logs work |
@@ -106,6 +130,25 @@ A proposal can only be confirmed **once**; reuse returns `409 AGENT_PROPOSAL_USE
 
 Call `GET /agent/actions` for the authoritative, complete list (args are passed
 in the `args` object; ids are strings).
+
+### AI-organized task creation (recommended)
+
+Instead of hand-building the title/checklist, pass a plain brief and let the AI
+organizer structure it. You only supply description + client (+ optional due
+date/assignee); it generates the title, description, and checklist.
+
+```json
+POST /agent/propose
+{ "actionKey": "tasks.createOrganized", "args": { "input": {
+    "description": "Contact form on the booking page isn't emailing submissions; also add a honeypot for spam.",
+    "projectId": "25",
+    "assignee": "Queenie",
+    "dueDate": "2026-08-01"
+} } }
+```
+Then `confirm` — the response `result` is the created task with the AI-generated
+`title` and `checklist`. (Requires the Task Organizer prompt to be configured in
+the app's Settings; otherwise you'll get `409 TASK_ORGANIZER_PROMPT_REQUIRED`.)
 
 ## Errors
 

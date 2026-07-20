@@ -13,7 +13,7 @@ import {
   TableRow,
   useOverlayState,
 } from "@heroui/react";
-import { Copy, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
+import { ChevronDown, Copy, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
@@ -22,6 +22,7 @@ import {
   deleteWebsiteCredential,
   getWebsiteCredentialOptions,
   listWebsiteCredentials,
+  revealWebsiteCredential,
   updateWebsiteCredential,
   type WebsiteCredentialOptions,
 } from "@/libs/api/website-users";
@@ -38,6 +39,71 @@ const emptyOptions: WebsiteCredentialOptions = {
   names: [],
   environments: ["Live", "Staging"],
 };
+
+function CopyMenu({
+  label,
+  onCopyAll,
+  onCopyUsername,
+  onCopyPassword,
+}: {
+  label: string;
+  onCopyAll: () => void | Promise<void>;
+  onCopyUsername: () => void | Promise<void>;
+  onCopyPassword: () => void | Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const items = [
+    { key: "all", label: "Copy all", fn: onCopyAll },
+    { key: "username", label: "Copy username", fn: onCopyUsername },
+    { key: "password", label: "Copy password", fn: onCopyPassword },
+  ];
+
+  return (
+    <div className="relative">
+      <Button
+        size="sm"
+        variant="ghost"
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onPress={() => setOpen((prev) => !prev)}
+      >
+        <Copy className="h-4 w-4" />
+        <ChevronDown className="h-3.5 w-3.5" />
+      </Button>
+      {open && (
+        <>
+          <button
+            type="button"
+            aria-hidden
+            tabIndex={-1}
+            className="fixed inset-0 z-30 cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            role="menu"
+            className="absolute right-0 z-40 mt-1 w-40 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+          >
+            {items.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                role="menuitem"
+                className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                onClick={() => {
+                  setOpen(false);
+                  void item.fn();
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 function credentialProjectName(c: Credential, options: WebsiteCredentialOptions) {
   return (
@@ -212,7 +278,7 @@ export function WebsiteUsersTable() {
     }
   };
 
-  const handleCopyCredential = async (c: Credential) => {
+  const handleCopyAll = async (c: Credential) => {
     try {
       const content = await copyWebsiteCredentialPackage(c.id);
       await navigator.clipboard?.writeText(content);
@@ -222,6 +288,27 @@ export function WebsiteUsersTable() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to copy credential.";
       notify.error("Unable to copy credential", { description: message });
+    }
+  };
+
+  const handleCopyUsername = async (c: Credential) => {
+    try {
+      await navigator.clipboard?.writeText(c.username);
+      notify.success("Username copied");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to copy username.";
+      notify.error("Unable to copy username", { description: message });
+    }
+  };
+
+  const handleCopyPassword = async (c: Credential) => {
+    try {
+      const password = await revealWebsiteCredential(c.id);
+      await navigator.clipboard?.writeText(password);
+      notify.success("Password copied");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to copy password.";
+      notify.error("Unable to copy password", { description: message });
     }
   };
 
@@ -384,15 +471,12 @@ export function WebsiteUsersTable() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Button
-                        isIconOnly
-                        size="sm"
-                        variant="ghost"
-                        aria-label={`Copy credential for ${c.name}`}
-                        onPress={() => void handleCopyCredential(c)}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
+                      <CopyMenu
+                        label={`Copy credential for ${c.name}`}
+                        onCopyAll={() => handleCopyAll(c)}
+                        onCopyUsername={() => handleCopyUsername(c)}
+                        onCopyPassword={() => handleCopyPassword(c)}
+                      />
                       <Button
                         isIconOnly
                         size="sm"

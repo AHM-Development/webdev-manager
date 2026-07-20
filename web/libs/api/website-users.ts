@@ -66,6 +66,13 @@ export async function deleteWebsiteCredential(credentialId: string) {
   await apiClient.delete(endpoints.websiteUsers.delete(credentialId));
 }
 
+export async function revealWebsiteCredential(credentialId: string) {
+  const { data } = await apiClient.post<{ password: string }>(
+    endpoints.websiteUsers.reveal(credentialId)
+  );
+  return data.password;
+}
+
 export async function copyWebsiteCredentialPackage(credentialId: string) {
   const { data } = await apiClient.post<{ content: string }>(
     endpoints.websiteUsers.copyPackage(credentialId)

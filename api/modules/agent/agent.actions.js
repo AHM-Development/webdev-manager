@@ -11,6 +11,7 @@
 //   run    : (user, args, ctx) => Promise<result>   ctx = { ip, userAgent }
 //   describe(args) : short human summary shown in the proposal (optional)
 
+var env = require('../../config/env');
 var roles = require('../../config/roles');
 var projects = require('../projects/projects.service');
 var tasks = require('../tasks/tasks.service');
@@ -32,6 +33,34 @@ function def(access, roleGroup, run, describe) {
 }
 function read(roleGroup, run) { return def('read', roleGroup, run); }
 function write(roleGroup, run, describe) { return def('write', roleGroup, run, describe); }
+
+// Agent date handling: today's date (YYYY-MM-DD) in the workspace timezone,
+// with an optional day offset.
+function agentToday(offsetDays) {
+  var d = new Date();
+  if (offsetDays) d.setUTCDate(d.getUTCDate() + offsetDays);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: env.timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(d);
+}
+// Resolve an agent-supplied date: understand today/tomorrow/yesterday, and pass
+// a YYYY-MM-DD through untouched (tasks.service validates the format).
+function agentDate(value) {
+  var v = String(value == null ? '' : value).trim().toLowerCase();
+  if (!v) return null;
+  if (v === 'today') return agentToday(0);
+  if (v === 'tomorrow') return agentToday(1);
+  if (v === 'yesterday') return agentToday(-1);
+  return value;
+}
+// Task input with agent-friendly dates: default the start date to today when the
+// agent didn't specify one, and resolve any relative due date.
+function withAgentDates(input) {
+  var out = Object.assign({}, input || {});
+  out.startDate = input && input.startDate ? agentDate(input.startDate) : agentToday(0);
+  if (input && input.dueDate) out.dueDate = agentDate(input.dueDate);
+  return out;
+}
 
 var ACTIONS = {
   // ----- Insights (read-only aggregate rollups; no writes) -----
@@ -106,7 +135,7 @@ var ACTIONS = {
   'tasks.list': read(ALL, function(u, a) { return tasks.listTasks(a.filters || {}, u); }),
   'tasks.get': read(ALL, function(u, a) { return tasks.getTask(a.taskId); }),
   'tasks.assignees': read(ALL, function() { return tasks.listAssignees(); }),
-  'tasks.create': write(STAFF_WRITE, function(u, a, c) { return tasks.createTask(a.input || {}, u, c); },
+  'tasks.create': write(STAFF_WRITE, function(u, a, c) { return tasks.createTask(withAgentDates(a.input || {}), u, c); },
     function(a) { return 'Create task "' + ((a.input && a.input.title) || 'Untitled') + '"'; }),
   // AI-organized task request: a person asks Viktor for a task; the organizer
   // arranges it and it's saved as a PENDING request attributed to that requestor,
@@ -133,7 +162,8 @@ var ACTIONS = {
       priority: i.priority || draft.priority,
       status: i.status || draft.status,
       assigneeName: i.assignee || i.assigneeName,
-      dueDate: i.dueDate,
+      startDate: i.startDate ? agentDate(i.startDate) : agentToday(0),
+      dueDate: i.dueDate ? agentDate(i.dueDate) : undefined,
       requestor: i.requestor,
       requestedByUserId: i.requestedByUserId,
     }, u, c);
@@ -264,4 +294,4 @@ function list() {
   });
 }
 
-module.exports = { ACTIONS: ACTIONS, get: get, list: list, ARGS: ARGS };
+module.exports = { ACTIONS: ACTIONS, get: get, list: list, ARGS: ARGS, agentDate: agentDate, agentToday: agentToday };

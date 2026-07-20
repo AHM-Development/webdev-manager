@@ -152,6 +152,10 @@ the review queue, and once a manager approves it, it shows on the assignee's boa
   the review queue for a manager to assign + approve.
 - You supply the brief; the AI generates title/description/checklist. Any field you
   pass explicitly (`title`, `checklist`, `priority`, `status`) overrides the AI.
+- **Dates:** `startDate`/`dueDate` accept `today`/`tomorrow`/`yesterday` or
+  `YYYY-MM-DD`. If you don't set a start date, it **defaults to today**. (Sending a
+  bare word like "today" for a date now works — previously only `YYYY-MM-DD` was
+  accepted.)
 
 ```json
 POST /agent/propose

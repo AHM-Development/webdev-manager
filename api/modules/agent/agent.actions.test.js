@@ -33,3 +33,14 @@ test('tasks.create advertises the input.title nesting (the "Untitled" footgun)',
   assert.ok(setStatus.args.taskId, 'setStatus takes taskId at the top level');
   assert.equal(setStatus.args.input, undefined);
 });
+
+test('agentDate resolves relative words and passes ISO dates through', () => {
+  const today = actions.agentToday(0);
+  assert.match(today, /^\d{4}-\d{2}-\d{2}$/, 'today is YYYY-MM-DD');
+  assert.equal(actions.agentDate('today'), today);
+  assert.equal(actions.agentDate('TODAY'), today);
+  assert.notEqual(actions.agentDate('tomorrow'), today);
+  assert.equal(actions.agentDate('2026-08-01'), '2026-08-01', 'ISO passes through');
+  assert.equal(actions.agentDate(''), null);
+  assert.equal(actions.agentDate(null), null);
+});

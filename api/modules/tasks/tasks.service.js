@@ -1,6 +1,7 @@
 var db = require('../../db/pool');
 var activity = require('../auth/activity.service');
 var notifications = require('../notifications/notifications.service');
+var taskBus = require('./task-bus');
 var roles = require('../../config/roles');
 
 var STATUSES = ['Backlog', 'In Progress', 'Review', 'Blocked', 'Done'];
@@ -431,6 +432,7 @@ async function createTask(input, user, context) {
     notifyAssignee(task, user, context, null);
     notifyReviewer(task, user, context, null);
   }
+  taskBus.emitTaskChange('created', task);
   return task;
 }
 
@@ -446,6 +448,7 @@ async function approveRequest(taskId, user, context) {
   var updated = await getTask(taskId);
   await logTaskActivity(user, context, 'tasks.request_approved', updated);
   notifyRequestDecided(updated, user, context, 'approved');
+  taskBus.emitTaskChange('approved', updated);
   return updated;
 }
 
@@ -460,6 +463,7 @@ async function rejectRequest(taskId, user, context) {
   var updated = await getTask(taskId);
   await logTaskActivity(user, context, 'tasks.request_rejected', updated);
   notifyRequestDecided(updated, user, context, 'rejected');
+  taskBus.emitTaskChange('rejected', updated);
   return updated;
 }
 
@@ -524,6 +528,7 @@ async function updateTask(taskId, input, user, context) {
   await logTaskActivity(user, context, 'tasks.update', task);
   notifyAssignee(task, user, context, before.assigneeUserId);
   notifyReviewer(task, user, context, before.reviewerUserId);
+  taskBus.emitTaskChange('updated', task);
   return task;
 }
 
@@ -547,6 +552,7 @@ async function updateStatus(taskId, status, user, context) {
       actionUrl: '/dashboard/tasks', metadata: { taskId: task.id, projectId: task.projectId },
     }, user, context).catch(function() {});
   }
+  taskBus.emitTaskChange('updated', task);
   return task;
 }
 
@@ -585,7 +591,9 @@ async function moveTasks(input, user, context) {
         userId: user.id,
       }
     );
-    updated.push(await getTask(taskId));
+    var movedTask = await getTask(taskId);
+    updated.push(movedTask);
+    taskBus.emitTaskChange('updated', movedTask);
   }
 
   if (updated.length) {
@@ -614,6 +622,7 @@ async function deleteTask(taskId, user, context) {
     { taskId: taskId, userId: user.id }
   );
   await logTaskActivity(user, context, 'tasks.delete', task);
+  taskBus.emitTaskChange('deleted', task);
 }
 
 async function logTaskActivity(user, context, eventType, task) {

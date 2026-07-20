@@ -18,6 +18,8 @@ import {
   updateTaskStatus,
 } from "@/libs/api/tasks";
 import { useAuth } from "@/libs/hooks/useAuth";
+import { useRealtimeEvent } from "@/hooks/use-realtime";
+import { realtimeEvents } from "@/libs/realtime/events";
 import { notify } from "@/libs/notify";
 
 import {
@@ -297,6 +299,32 @@ export function TasksView() {
     },
     [detailState]
   );
+
+  // Live updates: reflect task changes from anyone (other users, Viktor) without
+  // a refresh. The server scopes which clients receive pending requests.
+  const handleTaskChanged = useCallback(
+    (payload: { action: string; task: Task }) => {
+      const { action, task } = payload;
+      if (!task || !task.id) return;
+      if (action === "deleted") {
+        setTasks((prev) => prev.filter((t) => t.id !== task.id));
+        setRequests((prev) => prev.filter((t) => t.id !== task.id));
+        return;
+      }
+      const upsert = (list: Task[]) => [task, ...list.filter((t) => t.id !== task.id)];
+      if (task.requestStatus === "approved") {
+        setTasks((prev) => upsert(prev)); // on the board/summary
+        setRequests((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+      } else {
+        // pending / rejected request — not on the board
+        setRequests((prev) => (task.requestedBy ? upsert(prev) : prev));
+        setTasks((prev) => prev.filter((t) => t.id !== task.id));
+      }
+      setActiveTask((current) => (current && current.id === task.id ? task : current));
+    },
+    []
+  );
+  useRealtimeEvent(realtimeEvents.taskChanged, handleTaskChanged);
 
   const handleUpdateTask = useCallback(async (updatedTask: Task) => {
     const saved = await updateTask(updatedTask.id, {

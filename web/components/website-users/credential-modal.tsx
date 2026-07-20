@@ -17,7 +17,8 @@ import {
   type useOverlayState,
 } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Controller, useForm } from "react-hook-form";
 
 import { PasswordField } from "@/components/ui/password";
@@ -51,6 +52,8 @@ function UserNameCombobox({
   invalid?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
   const q = value.trim().toLowerCase();
 
   const userMatches = users.filter(
@@ -69,67 +72,103 @@ function UserNameCombobox({
   );
   const hasSuggestions = userMatches.length > 0 || customMatches.length > 0;
 
+  const place = () => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+  };
+
+  // The modal body scrolls (overflow-y-auto), so the menu is portaled to the
+  // body and closes on scroll/resize to stay anchored to the input.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   return (
-    <div className="relative">
+    <div ref={wrapRef} className="relative">
       <input
         value={value}
         onChange={(e) => {
           onChange(e.target.value, ""); // typing = custom, clears the user link
+          place();
           setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          place();
+          setOpen(true);
+        }}
         onBlur={() => {
           onBlur();
-          setTimeout(() => setOpen(false), 120);
+          setTimeout(() => setOpen(false), 150);
         }}
         placeholder="Select a user or type a custom name"
         className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-blue-500 ${
           invalid ? "border-red-400" : "border-gray-200"
         }`}
       />
-      {open && hasSuggestions && (
-        <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-gray-200 bg-white shadow-md">
-          {userMatches.map((u) => (
-            <li key={`u-${u.id}`}>
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onChange(u.name, u.id);
-                  setOpen(false);
-                }}
-                className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+      {open &&
+        hasSuggestions &&
+        pos &&
+        createPortal(
+          <ul
+            style={{ top: pos.top, left: pos.left, width: pos.width }}
+            className="fixed z-60 max-h-64 overflow-y-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+          >
+            {userMatches.map((u) => (
+              <li key={`u-${u.id}`}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onChange(u.name, u.id);
+                    setOpen(false);
+                  }}
+                  className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+                >
+                  <span className="block text-sm text-gray-800">{u.name}</span>
+                  <span className="block text-xs text-gray-500">{u.email}</span>
+                </button>
+              </li>
+            ))}
+            {customMatches.length > 0 && userMatches.length > 0 && (
+              <li
+                aria-hidden
+                className="border-t border-gray-100 px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-gray-400"
               >
-                <span className="block text-sm text-gray-800">{u.name}</span>
-                <span className="block text-xs text-gray-500">{u.email}</span>
-              </button>
-            </li>
-          ))}
-          {customMatches.length > 0 && userMatches.length > 0 && (
-            <li
-              aria-hidden
-              className="border-t border-gray-100 px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-gray-400"
-            >
-              Custom names
-            </li>
-          )}
-          {customMatches.map((n) => (
-            <li key={`n-${n}`}>
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onChange(n, "");
-                  setOpen(false);
-                }}
-                className="block w-full px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-50"
-              >
-                {n}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+                Custom names
+              </li>
+            )}
+            {customMatches.map((n) => (
+              <li key={`n-${n}`}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onChange(n, "");
+                    setOpen(false);
+                  }}
+                  className="block w-full px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-50"
+                >
+                  {n}
+                </button>
+              </li>
+            ))}
+          </ul>,
+          document.body
+        )}
     </div>
   );
 }

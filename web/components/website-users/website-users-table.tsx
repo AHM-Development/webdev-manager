@@ -434,7 +434,7 @@ export function WebsiteUsersTable() {
 
       <div className="app-table-shell overflow-x-auto">
         <Table aria-label="Website credentials">
-          <TableContent className="w-full min-w-[1040px] table-fixed">
+          <TableContent className="w-full min-w-280 table-fixed">
             <TableHeader>
               <TableColumn id="name" isRowHeader className="w-[14%]">
                 Name
@@ -448,16 +448,16 @@ export function WebsiteUsersTable() {
               <TableColumn id="username" className="w-[15%]">
                 Username
               </TableColumn>
-              <TableColumn id="created" className="w-[11%]">
+              <TableColumn id="created" className="w-[10%]">
                 Created
               </TableColumn>
-              <TableColumn id="passwordUpdated" className="w-[15%]">
+              <TableColumn id="passwordUpdated" className="w-[13%]">
                 Password Health
               </TableColumn>
-              <TableColumn id="note" className="w-[12%]">
+              <TableColumn id="note" className="w-[10%]">
                 Note
               </TableColumn>
-              <TableColumn id="action" className="w-[7%]">
+              <TableColumn id="action" className="w-[12%]">
                 Action
               </TableColumn>
             </TableHeader>
@@ -521,7 +521,7 @@ export function WebsiteUsersTable() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2">
                       <CopyMenu
                         label={`Copy credential for ${c.name}`}
                         onCopyAll={() => handleCopyAll(c)}

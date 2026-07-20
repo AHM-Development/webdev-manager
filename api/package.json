@@ -10,7 +10,8 @@
     "agent:key": "node ./scripts/create-agent-key.js",
     "test": "node --test 'modules/**/*.test.js' 'lib/**/*.test.js' 'config/**/*.test.js'",
     "seed:notifications": "node ./scripts/seed-notifications.js",
-    "reset:superadmin": "node ./scripts/reset-superadmin.js"
+    "reset:superadmin": "node ./scripts/reset-superadmin.js",
+    "credentials:backfill": "node ./scripts/backfill-credential-users.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

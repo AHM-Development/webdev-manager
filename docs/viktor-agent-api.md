@@ -33,14 +33,20 @@ hard ceiling. On top of that:
 GET /agent/actions
 Authorization: Bearer <key>
 ```
-Response:
+Response — each action advertises its **`args` shape**, so you don't have to guess:
 ```json
 { "actions": [
-  { "key": "insights.dashboard", "access": "read",  "roles": ["superadmin","developer","staff","spectator"] },
-  { "key": "tasks.setStatus",    "access": "write", "roles": ["superadmin","developer","staff"] }
+  { "key": "insights.dashboard", "access": "read",  "roles": [...], "args": {} },
+  { "key": "tasks.setStatus",    "access": "write", "roles": [...],
+    "args": { "taskId": "string id, required", "status": "Backlog|In Progress|Review|Blocked|Done, required" } },
+  { "key": "tasks.create",       "access": "write", "roles": [...],
+    "args": { "input": { "title": "string, required", "description": "string", "projectId": "string id", "assigneeName": "string", "dueDate": "YYYY-MM-DD", "priority": "Low|Medium|High", "status": "…" } } }
 ] }
 ```
-`access` is `read` or `write`. Use `read` actions with `/read`, `write` actions with `/propose`+`/confirm`.
+`access` is `read` or `write`. Use `read` actions with `/read`, `write` actions with
+`/propose`+`/confirm`. **The `args` object mirrors what to send** — note that some
+actions take fields at the top level (`taskId`) while create/update actions nest
+them under `input`.
 
 ### `POST /agent/read` — run a read action
 ```

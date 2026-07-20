@@ -173,6 +173,81 @@ var ACTIONS = {
     function(a) { return 'Update application ' + a.applicationId + ' on issue ' + a.issueId; }),
 };
 
+// Advertised argument shapes for GET /agent/actions. The structure mirrors what
+// each action expects in `args` — note create/update actions nest their fields
+// under `input`, while id/field actions take them at the top level. IDs are
+// strings. This is documentation for the agent, not enforced validation.
+var TASK_STATUS = 'Backlog|In Progress|Review|Blocked|Done';
+var PRIORITY = 'Low|Medium|High';
+
+var ARGS = {
+  'insights.dashboard': {},
+  'insights.project': { projectId: 'string id, required' },
+
+  'projects.list': { filters: 'object, optional: { status, priority, assignee, q }' },
+  'projects.get': { projectId: 'string id, required' },
+  'projects.options': {},
+  'projects.update': { projectId: 'string id, required', input: 'object: { clientName, type, status, priority, assigneeName, figmaLink, domainManagement, serverLocation, websites:[{name,url}] }' },
+  'projects.setPriority': { projectId: 'string id, required', priority: 'High|Medium|Low, required' },
+  'projects.setStatus': { projectId: 'string id, required', status: 'Live|Staging|In Progress|Site Handed Over|Churned, required' },
+
+  'clientLogs.overview': { q: 'string, optional', status: 'string, optional', page: 'number, optional', pageSize: 'number, optional' },
+  'clientLogs.stages': { projectId: 'string id, required' },
+  'clientLogs.stage': { stageId: 'string id, required' },
+  'clientLogs.launchReadiness': { projectId: 'string id, required' },
+  'clientLogs.templates': {},
+  'clientLogs.template': { templateId: 'string id, required' },
+  'clientLogs.meetings': { projectId: 'string id, required', stageId: 'string id, optional' },
+  'clientLogs.assignableUsers': {},
+  'clientLogs.applyTemplate': { projectId: 'string id, required', templateId: 'string id, required' },
+  'clientLogs.addStage': { projectId: 'string id, required', input: 'object: { name, ... }' },
+  'clientLogs.reorderStages': { projectId: 'string id, required', orderedIds: 'string[] of stage ids' },
+  'clientLogs.updateStage': { stageId: 'string id, required', input: 'object: { name, status, ownerUserId, reviewerUserId, dueDate, ... }' },
+  'clientLogs.addStageTask': { stageId: 'string id, required', input: 'object: task fields (see tasks.create input)' },
+  'clientLogs.linkStageTask': { stageId: 'string id, required', taskId: 'string id, required' },
+  'clientLogs.createTemplate': { input: 'object: { name, ... }' },
+  'clientLogs.updateTemplate': { templateId: 'string id, required', input: 'object' },
+  'clientLogs.addTemplateStage': { templateId: 'string id, required', input: 'object: { name, ... }' },
+  'clientLogs.updateTemplateStage': { templateId: 'string id, required', stageId: 'string id, required', input: 'object' },
+  'clientLogs.reorderTemplateStages': { templateId: 'string id, required', orderedIds: 'string[] of stage ids' },
+  'clientLogs.importMeeting': { payload: 'object: meeting import payload' },
+  'clientLogs.confirmMeetingAction': { actionId: 'string id, required', input: 'object, optional' },
+  'clientLogs.rejectMeetingAction': { actionId: 'string id, required' },
+
+  'health.list': { filters: 'object, optional' },
+  'health.website': { websiteId: 'string id, required' },
+  'health.history': { websiteId: 'string id, required', limit: 'number, optional' },
+  'health.scan': { scanId: 'string id, required' },
+  'health.report': { scanId: 'string id, required' },
+  'health.pages': { scanId: 'string id, required' },
+  'health.capabilities': {},
+  'health.startScan': { websiteId: 'string id, required', checks: 'string[], optional', sitemapUrl: 'string, optional' },
+  'health.cancelScan': { scanId: 'string id, required' },
+  'health.retryScan': { scanId: 'string id, required' },
+
+  'tasks.list': { filters: 'object, optional: { projectId, status, assignee, mine, requests, requestStatus }' },
+  'tasks.get': { taskId: 'string id, required' },
+  'tasks.assignees': {},
+  'tasks.create': { input: { title: 'string, required', description: 'string', checklist: '[{ title, completed:boolean }]', projectId: 'string id', assigneeName: 'string (person name)', dueDate: 'YYYY-MM-DD', priority: PRIORITY, status: TASK_STATUS } },
+  'tasks.createOrganized': { input: { requestor: 'string, required (email or full name of who asked)', description: 'string, required (brief; AI builds title + checklist)', projectId: 'string id', assignee: 'string (person name; if set, task skips approval and goes to their board)', dueDate: 'YYYY-MM-DD', title: 'string, optional (overrides AI)', priority: PRIORITY + ', optional', status: TASK_STATUS + ', optional' } },
+  'tasks.update': { taskId: 'string id, required', input: 'object: same fields as tasks.create input' },
+  'tasks.setStatus': { taskId: 'string id, required', status: TASK_STATUS + ', required' },
+  'tasks.move': { input: 'object: { items:[{ id, status, assignee, sortOrder }] }' },
+
+  'notes.list': { projectId: 'string id, optional' },
+  'notes.create': { input: 'object: { body, projectId, ... }' },
+  'notes.update': { noteId: 'string id, required', input: 'object: { body, ... }' },
+
+  'issues.list': { filters: 'object, optional: { status, projectId, q }' },
+  'issues.get': { issueId: 'string id, required' },
+  'issues.options': {},
+  'issues.create': { input: 'object: { title, description, priority, status, ... }' },
+  'issues.update': { issueId: 'string id, required', input: 'object' },
+  'issues.setStatus': { issueId: 'string id, required', status: 'Open|In Progress|Fixed, required' },
+  'issues.addApplications': { issueId: 'string id, required', input: 'object: { projectIds:[...] }' },
+  'issues.updateApplication': { issueId: 'string id, required', applicationId: 'string id, required', input: 'object' },
+};
+
 function get(actionKey) {
   return Object.prototype.hasOwnProperty.call(ACTIONS, actionKey) ? ACTIONS[actionKey] : null;
 }
@@ -180,8 +255,13 @@ function get(actionKey) {
 /** Self-describing capability list (no run functions) for GET /agent/actions. */
 function list() {
   return Object.keys(ACTIONS).map(function(key) {
-    return { key: key, access: ACTIONS[key].access, roles: ACTIONS[key].roles };
+    return {
+      key: key,
+      access: ACTIONS[key].access,
+      roles: ACTIONS[key].roles,
+      args: ARGS[key] || {},
+    };
   });
 }
 
-module.exports = { ACTIONS: ACTIONS, get: get, list: list };
+module.exports = { ACTIONS: ACTIONS, get: get, list: list, ARGS: ARGS };

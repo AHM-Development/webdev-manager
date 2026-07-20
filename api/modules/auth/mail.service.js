@@ -92,11 +92,25 @@ function encodeHeader(value) {
   return '=?UTF-8?B?' + Buffer.from(text, 'utf8').toString('base64') + '?=';
 }
 
+// Gmail sends AS the authenticated account, so force the From address to match
+// it (like WP Mail SMTP's "Force From") — keeping any display name from MAIL_FROM.
+// A From on a different domain than the signer (gmail.com) fails alignment → spam.
+function gmailFromHeader() {
+  var configured = String(env.mail.from || '');
+  var match = configured.match(/^\s*"?([^"<]*?)"?\s*<[^>]+>\s*$/);
+  var displayName = match ? match[1].trim() : '';
+  return displayName ? displayName + ' <' + env.mail.googleEmail + '>' : env.mail.googleEmail;
+}
+
 function buildRawMessage(opts) {
+  var domain = env.mail.googleEmail.split('@')[1] || 'gmail.com';
+  var messageId = '<' + Date.now() + '.' + Math.random().toString(36).slice(2) + '@' + domain + '>';
   var lines = [
-    'From: ' + (opts.from || env.mail.from),
+    'From: ' + gmailFromHeader(),
     'To: ' + opts.to,
     'Subject: ' + encodeHeader(opts.subject),
+    'Date: ' + new Date().toUTCString(),
+    'Message-ID: ' + messageId,
     'MIME-Version: 1.0',
     'Content-Type: ' + (opts.html ? 'text/html' : 'text/plain') + '; charset="UTF-8"',
     'Content-Transfer-Encoding: base64',

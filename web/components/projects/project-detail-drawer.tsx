@@ -28,6 +28,7 @@ import { useEffect } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 
 import type { ProjectPayload } from "@/libs/api/projects";
+import { notify } from "@/libs/notify";
 
 import {
   PRIORITY_OPTIONS,
@@ -161,8 +162,16 @@ export function ProjectDetailDrawer({
 
   const onSubmit = async (values: ProjectFormValues) => {
     if (!project) return;
-    const saved = await onSave(project.id, toPayload(values));
-    reset(projectToFormValues(saved));
+    try {
+      const saved = await onSave(project.id, toPayload(values));
+      reset(projectToFormValues(saved));
+    } catch (err) {
+      // The API interceptor rejects with a plain { message, status } object,
+      // not an Error, so read message off it directly.
+      const message =
+        (err as { message?: string })?.message ?? "Please try again.";
+      notify.error("Could not save project", { description: message });
+    }
   };
 
   return (

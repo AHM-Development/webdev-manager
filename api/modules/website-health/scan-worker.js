@@ -9,6 +9,8 @@ var lighthouse = require('./lighthouse.service');
 var review = require('./review.service');
 var connector = require('../connectors/wordpress.service');
 var siteChecks = require('./site-checks.service');
+var technicalSeo = require('./technical-seo.service');
+var urlSecurity = require('./url-security');
 var health = require('./website-health.service');
 var notifications = require('../notifications/notifications.service');
 
@@ -43,6 +45,23 @@ async function insertFindings(scanId, pageId, findings) {
       }
     );
   }
+}
+
+// Extract schema.org @type values from JSON-LD, walking @graph and arrays and
+// handling @type as a string or an array (most WordPress SEO plugins nest their
+// schema inside a single @graph node, so a top-level @type lookup misses them).
+function schemaTypesFrom(schemas) {
+  var types = [];
+  function collect(node) {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.forEach(collect); return; }
+    if (node['@graph']) collect(node['@graph']);
+    var t = node['@type'];
+    if (typeof t === 'string') types.push(t);
+    else if (Array.isArray(t)) t.forEach(function(x) { if (typeof x === 'string') types.push(x); });
+  }
+  (schemas || []).forEach(collect);
+  return Array.from(new Set(types));
 }
 
 function pageLegacy(pageId, evidence, lighthouseResult, reviewed) {
@@ -82,12 +101,12 @@ function pageLegacy(pageId, evidence, lighthouseResult, reviewed) {
       transferSizeKb: 0, consoleErrors: evidence.consoleErrors.length, renderBlockingResources: 0,
     },
     images: ((evidence.core && evidence.core.images) || []).map(function(image) { return { src: image.src, sizeKb: 0, issues: !image.width ? ['too-large'] : [] }; }),
-    seoChecks: technical.reduce(function(output, item) { output[item.checkId] = item.severity === 'critical' ? 'fail' : 'warn'; return output; }, {}),
-    seoNotes: technical.reduce(function(output, item) { output[item.checkId] = item.detail; return output; }, {}),
+    seoChecks: technicalSeo.seoChecksFromFindings(technical),
+    seoNotes: technicalSeo.seoNotesFromFindings(technical),
     technicalSeoScore: Math.max(0, 100 - technical.filter(function(item) { return item.severity === 'critical'; }).length * 15 - technical.filter(function(item) { return item.severity === 'warning'; }).length * 5),
     brokenInternalLinks: 0, brokenExternalLinks: 0,
     missingAltImages: ((evidence.core && evidence.core.images) || []).filter(function(image) { return image.alt === null; }).length,
-    schemaTypes: ((evidence.core && evidence.core.schemas) || []).map(function(schema) { return schema['@type']; }).filter(Boolean),
+    schemaTypes: schemaTypesFrom(evidence.core && evidence.core.schemas),
     designQa: {
       mobile: statusFor(design.filter(function(item) { return item.viewport === 'mobile' || item.viewport === 'all'; })),
       tablet: statusFor(design.filter(function(item) { return item.viewport === 'tablet' || item.viewport === 'all'; })),
@@ -329,9 +348,30 @@ async function processScan(scanId) {
     // links, duplicate meta) run once per scan, independent of Lighthouse.
     if (checks.indexOf('technical_seo') !== -1 && browserPages.length && !(await cancelled(scanId))) {
       await update(scanId, 'site_checks', 88);
-      var siteFindings = await siteChecks.siteChecks({ websiteUrl: website.url, sitemapUrl: scan.sitemap_url, pages: browserPages });
+      var siteResult = await siteChecks.siteChecks({ websiteUrl: website.url, sitemapUrl: scan.sitemap_url, pages: browserPages });
+      var siteFindings = siteResult.findings;
       await insertFindings(scanId, null, siteFindings);
       allFindings.push.apply(allFindings, siteFindings);
+      // Attribute broken links back to each page (internal vs external) for the
+      // per-page Technical SEO table, reusing the single site-wide link check.
+      var brokenSet = new Set(siteResult.brokenLinks || []);
+      if (brokenSet.size) {
+        for (var lp = 0; lp < legacyPages.length; lp += 1) {
+          var pageLinks = (browserPages[lp].core && browserPages[lp].core.links) || [];
+          var seenHref = {};
+          var internalBroken = 0;
+          var externalBroken = 0;
+          pageLinks.forEach(function(link) {
+            var href = String(link.href || '').split('#')[0];
+            if (!href || !brokenSet.has(href) || seenHref[href]) return;
+            seenHref[href] = true;
+            if (urlSecurity.sameRegistrableHost(href, website.url)) internalBroken += 1;
+            else externalBroken += 1;
+          });
+          legacyPages[lp].brokenInternalLinks = internalBroken;
+          legacyPages[lp].brokenExternalLinks = externalBroken;
+        }
+      }
     }
     // Website checklists (WordPress maintenance + security) only run when
     // selected and the connector is paired. 'security' is accepted for

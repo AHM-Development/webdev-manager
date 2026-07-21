@@ -3,6 +3,17 @@
 
 var LEGACY_IMAGE_EXT = /\.(jpe?g|png|gif|bmp|tiff?)(?:$|\?)/i;
 var MODERN_TYPE = /(webp|avif)/i;
+// Camera/generic export names that carry no SEO value (IMG_4521, DSC0001,
+// screenshot-…, untitled, or a bare number).
+var NON_DESCRIPTIVE_IMAGE = /(?:^|\/)(?:img[-_]?\d+|dsc[-_n]?\d+|dscf\d+|p\d{6,}|photo[-_]?\d+|image[-_]?\d+|screen[\s_-]?shot|screenshot|untitled|unnamed|download|\d{5,})[^/]*\.(?:jpe?g|png|gif|webp|avif)(?:$|\?)/i;
+
+function imageFileName(src) {
+  try {
+    return decodeURIComponent(new URL(src).pathname.split('/').pop() || '');
+  } catch (err) {
+    return String(src || '').split('/').pop() || '';
+  }
+}
 var NON_DESCRIPTIVE_LINK = ['click here', 'read more', 'here', 'link', 'learn more', 'more', 'this'];
 var WEIGHT_WARN = 250 * 1024;
 var WEIGHT_FAIL = 600 * 1024;
@@ -139,6 +150,11 @@ function technicalSeoFindings(page) {
     out.push(finding('seo.image-format', 'warning', 'Images not using a modern format', legacy.length + ' of ' + images.length + ' images are JPEG/PNG/GIF rather than WebP/AVIF.', legacy.slice(0, 8).map(function(image) { return image.src; }).join('\n'), 'Serve WebP or AVIF for faster loads.'));
   }
 
+  var badNames = images.filter(function(image) { return NON_DESCRIPTIVE_IMAGE.test(imageFileName(image.src)); });
+  if (badNames.length) {
+    out.push(finding('seo.image-filename', 'warning', 'Images have non-descriptive file names', badNames.length + ' of ' + images.length + ' images use camera/generic names (e.g. IMG_4521.jpg).', badNames.slice(0, 8).map(function(image) { return imageFileName(image.src); }).join('\n'), 'Rename images descriptively before upload, e.g. web-design-dubai.webp.'));
+  }
+
   var oversized = images.filter(function(image) {
     var intrinsic = Number(image.width) || 0;
     var rendered = Number(image.renderedWidth) || 0;
@@ -157,4 +173,64 @@ function technicalSeoFindings(page) {
   return out;
 }
 
-module.exports = { technicalSeoFindings: technicalSeoFindings };
+// Maps deterministic finding checkIds onto the frontend on-page checklist ids
+// (see web/components/website-health/seo-checklist.ts). Info-only findings that
+// aren't real issues (e.g. the image count) are intentionally left out.
+var SEO_CHECK_MAP = {
+  'seo.title': 'title-tag',
+  'seo.meta-description': 'meta-description',
+  'seo.h1': 'headings',
+  'seo.heading-order': 'headings',
+  'seo.canonical': 'canonical',
+  'seo.structured-data': 'schema',
+  'seo.open-graph': 'og-tags',
+  'seo.link-text': 'internal-linking',
+  'seo.noindex': 'robots-meta',
+  'seo.broken-links': 'internal-linking',
+  'seo.image-alt': 'images',
+  'seo.image-format': 'images',
+  'seo.image-filename': 'images',
+  'seo.image-oversized': 'images',
+  'seo.image-weight': 'images',
+};
+
+// Checklist items the deterministic crawl can actually judge — start each at
+// "pass" and downgrade as findings appear, so a clean page reads as passing
+// rather than "not detected".
+var EVALUATED_SEO_IDS = [
+  'title-tag', 'meta-description', 'headings', 'url', 'images',
+  'og-tags', 'canonical', 'schema', 'internal-linking', 'robots-meta',
+];
+
+function statusRank(status) {
+  return status === 'fail' ? 3 : status === 'warn' ? 2 : 1;
+}
+
+/** Turn technical-SEO findings into per-checklist pass/warn/fail statuses. */
+function seoChecksFromFindings(findings) {
+  var checks = {};
+  EVALUATED_SEO_IDS.forEach(function(id) { checks[id] = 'pass'; });
+  (findings || []).forEach(function(item) {
+    var id = SEO_CHECK_MAP[item.checkId];
+    if (!id) return;
+    var status = item.severity === 'critical' ? 'fail' : 'warn';
+    if (statusRank(status) > statusRank(checks[id])) checks[id] = status;
+  });
+  return checks;
+}
+
+/** Per-checklist notes (the finding detail), keyed by the frontend checklist id. */
+function seoNotesFromFindings(findings) {
+  var notes = {};
+  (findings || []).forEach(function(item) {
+    var id = SEO_CHECK_MAP[item.checkId];
+    if (id && !notes[id]) notes[id] = item.detail;
+  });
+  return notes;
+}
+
+module.exports = {
+  technicalSeoFindings: technicalSeoFindings,
+  seoChecksFromFindings: seoChecksFromFindings,
+  seoNotesFromFindings: seoNotesFromFindings,
+};

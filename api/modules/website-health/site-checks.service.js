@@ -190,7 +190,8 @@ async function siteChecks(options) {
       'Write a unique meta description per page.'));
   }
 
-  return out;
+  // Broken URLs are also surfaced per page in the scan worker.
+  return { findings: out, brokenLinks: broken.map(function(item) { return item.url; }) };
 }
 
 module.exports = { siteChecks: siteChecks };

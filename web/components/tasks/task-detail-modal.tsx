@@ -25,7 +25,7 @@ import {
 } from "@heroui/react";
 import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { FileText, Link2, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import type { DateValue, RangeValue } from "react-aria-components";
@@ -45,6 +45,8 @@ import {
 } from "./create-task-modal";
 import { editTaskSchema, type EditTaskValues } from "./schema";
 import { checklistProgress, makeChecklistItem } from "./task-utils";
+import { AttachmentCard } from "./attachment-card";
+import { AttachmentUploader } from "./attachment-uploader";
 import { ChecklistTextArea } from "./checklist-textarea";
 
 function toDateValue(value?: string): DateValue | null {
@@ -501,59 +503,38 @@ export function TaskDetailModal({
                   }
                 />
 
-                {attachments.length > 0 && (
-                  <div className="space-y-2">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-slate-700">
                       Attachments
                     </p>
+                    {!readOnly && (
+                      <AttachmentUploader
+                        onAdd={(attachment) =>
+                          setAttachments((current) => [...current, attachment])
+                        }
+                      />
+                    )}
+                  </div>
+                  {attachments.length > 0 && (
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                       {attachments.map((attachment) => (
-                        <div
+                        <AttachmentCard
                           key={attachment.id}
-                          className="relative aspect-square overflow-hidden rounded-md border border-slate-200 bg-white p-3"
-                        >
-                          <button
-                            type="button"
-                            aria-label={`Remove ${attachment.name}`}
-                            className="absolute right-2 top-2 rounded-full bg-white p-1 text-slate-500 shadow-sm hover:text-slate-900"
-                            onClick={() =>
-                              setAttachments((current) =>
-                                current.filter((item) => item.id !== attachment.id)
-                              )
-                            }
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                          <a
-                            href={attachment.url || undefined}
-                            target={attachment.url ? "_blank" : undefined}
-                            rel={attachment.url ? "noreferrer" : undefined}
-                            className="flex h-full flex-col justify-between"
-                            onClick={(event) => {
-                              if (!attachment.url) event.preventDefault();
-                            }}
-                          >
-                            <div className="flex h-12 w-12 items-center justify-center rounded-md bg-[#e8f5ff] text-[#0b7de3]">
-                              {attachment.type === "link" ? (
-                                <Link2 className="h-5 w-5" />
-                              ) : (
-                                <FileText className="h-5 w-5" />
-                              )}
-                            </div>
-                            <div>
-                              <p className="line-clamp-2 break-all text-xs font-semibold text-slate-800">
-                                {attachment.name}
-                              </p>
-                              <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-slate-400">
-                                {attachment.type === "link" ? "Link" : "File"}
-                              </p>
-                            </div>
-                          </a>
-                        </div>
+                          attachment={attachment}
+                          onRemove={
+                            readOnly
+                              ? undefined
+                              : (item) =>
+                                  setAttachments((current) =>
+                                    current.filter((a) => a.id !== item.id)
+                                  )
+                          }
+                        />
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
                </fieldset>
               </ModalBody>
 

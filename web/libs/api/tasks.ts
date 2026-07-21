@@ -1,9 +1,25 @@
-import type { Task, TaskRequestStatus, TaskStatus } from "@/components/tasks/data";
+import type {
+  Task,
+  TaskAttachment,
+  TaskRequestStatus,
+  TaskStatus,
+} from "@/components/tasks/data";
 
 import { apiClient } from "./client";
 import { endpoints } from "./endpoints";
 
 export type TaskPayload = Omit<Task, "id">;
+
+export async function uploadTaskAttachment(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await apiClient.post<{ attachment: TaskAttachment }>(
+    endpoints.tasks.uploads,
+    form,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
+  return data.attachment;
+}
 
 export type TaskAssignee = {
   id: string;

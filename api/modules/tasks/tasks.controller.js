@@ -1,4 +1,5 @@
 var service = require('./tasks.service');
+var uploads = require('../../lib/uploads');
 
 function context(req) {
   return {
@@ -128,11 +129,33 @@ async function reject(req, res, next) {
   }
 }
 
+async function uploadAttachment(req, res, next) {
+  try {
+    if (!req.file) {
+      var err = new Error('No file was uploaded.');
+      err.status = 400;
+      err.code = 'NO_FILE';
+      throw err;
+    }
+    res.status(201).json({
+      attachment: {
+        id: 'file-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+        name: req.file.originalname,
+        type: 'file',
+        url: uploads.taskFileUrl(req.file.filename),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   list: list,
   mine: mine,
   assignees: assignees,
   get: get,
+  uploadAttachment: uploadAttachment,
   create: create,
   update: update,
   updateStatus: updateStatus,

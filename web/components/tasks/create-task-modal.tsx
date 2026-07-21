@@ -28,7 +28,6 @@ import {
 import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  FileText,
   Link2,
   Plus,
   Sparkles,
@@ -49,6 +48,8 @@ import {
   type TaskPriority,
 } from "./data";
 import { addTaskSchema, type AddTaskValues } from "./schema";
+import { AttachmentCard } from "./attachment-card";
+import { AttachmentUploader } from "./attachment-uploader";
 import { ChecklistTextArea } from "./checklist-textarea";
 import { makeChecklistItem } from "./task-utils";
 
@@ -339,10 +340,7 @@ export function CreateTaskModal({
   );
   const [organized, setOrganized] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
-  const [organizedAttachments, setOrganizedAttachments] = useState<
-    TaskAttachment[]
-  >([]);
-  const [removedLinks, setRemovedLinks] = useState<Set<string>>(() => new Set());
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
   const [checkedChecklistItems, setCheckedChecklistItems] = useState<Set<number>>(
     () => new Set()
   );
@@ -366,29 +364,25 @@ export function CreateTaskModal({
 
   const sourceText = form.watch("sourceText");
 
-  const attachments = useMemo<TaskAttachment[]>(
-    () => {
-      const candidates: TaskAttachment[] = [
-        ...organizedAttachments,
-        ...linksFrom(sourceText)
-        .filter((link) => !removedLinks.has(link))
-        .map((link, index) => ({
-          id: `link-${index}-${link}`,
-          name: link,
-          type: "link" as const,
-          url: link,
-        })),
-      ];
-      return Array.from(
-        new Map(
-          candidates
-            .filter((item) => item.type !== "link" || !item.url || !removedLinks.has(item.url))
-            .map((item) => [item.url || item.id, item])
-        ).values()
-      );
-    },
-    [organizedAttachments, removedLinks, sourceText]
-  );
+  // Merge organizer output + source links into a de-duplicated list, captured
+  // once at organize time so links survive even after the source box is hidden.
+  const mergeAttachments = (
+    organizerAttachments: TaskAttachment[],
+    text: string
+  ): TaskAttachment[] => {
+    const candidates: TaskAttachment[] = [
+      ...organizerAttachments,
+      ...linksFrom(text).map((link, index) => ({
+        id: `link-${index}-${link}`,
+        name: link,
+        type: "link" as const,
+        url: link,
+      })),
+    ];
+    return Array.from(
+      new Map(candidates.map((item) => [item.url || item.id, item])).values()
+    );
+  };
 
   const reset = () => {
     form.reset({
@@ -406,8 +400,7 @@ export function CreateTaskModal({
     });
     setOrganized(false);
     setIsOrganizing(false);
-    setOrganizedAttachments([]);
-    setRemovedLinks(new Set());
+    setAttachments([]);
     setCheckedChecklistItems(new Set());
     setChecklistItems([]);
   };
@@ -453,14 +446,20 @@ export function CreateTaskModal({
       form.setValue("status", draft.status ?? "Backlog", {
         shouldValidate: true,
       });
-      setOrganizedAttachments(
-        (draft.attachments ?? []).map((attachment, index) => ({
+      const organizerAttachments = (draft.attachments ?? []).map(
+        (attachment, index) => ({
           id: `organized-${index}-${attachment.name}`,
           name: attachment.name,
           type: attachment.type,
           url: attachment.url ?? undefined,
-        }))
+        })
       );
+      // Keep any files already attached before organizing, then fold in the
+      // organizer's attachments and the links detected in the source text.
+      setAttachments((current) => {
+        const files = current.filter((item) => item.type === "file");
+        return [...files, ...mergeAttachments(organizerAttachments, values.sourceText)];
+      });
       setIsOrganizing(false);
       setOrganized(true);
       setCheckedChecklistItems(new Set());
@@ -511,12 +510,13 @@ export function CreateTaskModal({
   };
 
   const removeAttachment = (attachment: TaskAttachment) => {
-    if (attachment.type === "link" && attachment.url) {
-      setRemovedLinks((current) => new Set(current).add(attachment.url ?? ""));
-    }
-    setOrganizedAttachments((current) =>
+    setAttachments((current) =>
       current.filter((item) => item.id !== attachment.id)
     );
+  };
+
+  const addAttachment = (attachment: TaskAttachment) => {
+    setAttachments((current) => [...current, attachment]);
   };
 
   const submit = form.handleSubmit(async (values) => {
@@ -795,55 +795,25 @@ export function CreateTaskModal({
                       }
                     />
 
-                    {attachments.length > 0 && (
-                      <div className="space-y-2">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
                         <p className="text-sm font-medium text-slate-700">
                           Attachments
                         </p>
+                        <AttachmentUploader onAdd={addAttachment} />
+                      </div>
+                      {attachments.length > 0 && (
                         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                           {attachments.map((attachment) => (
-                            <div
+                            <AttachmentCard
                               key={attachment.id}
-                              className="relative aspect-square overflow-hidden rounded-md border border-slate-200 bg-white p-3"
-                            >
-                              <button
-                                type="button"
-                                aria-label={`Remove ${attachment.name}`}
-                                className="absolute right-2 top-2 rounded-full bg-white p-1 text-slate-500 shadow-sm hover:text-slate-900"
-                                onClick={() => removeAttachment(attachment)}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                              <a
-                                href={attachment.url || undefined}
-                                target={attachment.url ? "_blank" : undefined}
-                                rel={attachment.url ? "noreferrer" : undefined}
-                                className="flex h-full flex-col justify-between"
-                                onClick={(event) => {
-                                  if (!attachment.url) event.preventDefault();
-                                }}
-                              >
-                                <div className="flex h-12 w-12 items-center justify-center rounded-md bg-[#e8f5ff] text-[#0b7de3]">
-                                  {attachment.type === "link" ? (
-                                    <Link2 className="h-5 w-5" />
-                                  ) : (
-                                    <FileText className="h-5 w-5" />
-                                  )}
-                                </div>
-                                <div>
-                                  <p className="line-clamp-2 break-all text-xs font-semibold text-slate-800">
-                                    {attachment.name}
-                                  </p>
-                                  <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-slate-400">
-                                    {attachment.type === "link" ? "Link" : "File"}
-                                  </p>
-                                </div>
-                              </a>
-                            </div>
+                              attachment={attachment}
+                              onRemove={removeAttachment}
+                            />
                           ))}
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 )}
               </ModalBody>

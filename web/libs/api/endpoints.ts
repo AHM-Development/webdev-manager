@@ -101,6 +101,7 @@ export const endpoints = {
     list: "/tasks",
     my: "/tasks/my",
     assignees: "/tasks/assignees",
+    uploads: "/tasks/uploads",
     create: "/tasks",
     detail: (taskId: string) => `/tasks/${taskId}`,
     update: (taskId: string) => `/tasks/${taskId}`,

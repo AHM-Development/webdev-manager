@@ -50,9 +50,61 @@ function formEvidenceUrl(filename) {
   return '/uploads/form-evidence/' + filename;
 }
 
+// --- Task attachments (images + documents) --------------------------------
+// Validated by file EXTENSION (from the original name) rather than the
+// browser-supplied mimetype, which is unreliable for documents (a .csv often
+// arrives as application/vnd.ms-excel). Stored under a UUID basename so the
+// original name never touches the filesystem path.
+var TASK_FILES_DIR = path.resolve(__dirname, '../public/uploads/task-files');
+fs.mkdirSync(TASK_FILES_DIR, { recursive: true });
+
+var ALLOWED_TASK_EXT = [
+  '.png', '.jpg', '.jpeg', '.webp', '.gif',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx',
+  '.csv', '.txt', '.ppt', '.pptx', '.zip',
+];
+
+function taskFileExt(originalName) {
+  var ext = path.extname(String(originalName || '')).toLowerCase();
+  return ALLOWED_TASK_EXT.indexOf(ext) === -1 ? null : ext;
+}
+
+function taskFileFilter(req, file, cb) {
+  if (taskFileExt(file.originalname)) {
+    cb(null, true);
+    return;
+  }
+  var err = new Error('Unsupported file type. Allowed: images, PDF, Word, Excel, CSV, text, PowerPoint, ZIP.');
+  err.status = 400;
+  err.code = 'INVALID_FILE_TYPE';
+  cb(err);
+}
+
+var taskFileStorage = multer.diskStorage({
+  destination: function(req, file, cb) {
+    cb(null, TASK_FILES_DIR);
+  },
+  filename: function(req, file, cb) {
+    cb(null, crypto.randomUUID() + (taskFileExt(file.originalname) || ''));
+  },
+});
+
+var uploadTaskFile = multer({
+  storage: taskFileStorage,
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: taskFileFilter,
+});
+
+function taskFileUrl(filename) {
+  return '/uploads/task-files/' + filename;
+}
+
 module.exports = {
   uploadFormEvidence: uploadFormEvidence,
   formEvidenceUrl: formEvidenceUrl,
   imageFileFilter: imageFileFilter,
   ALLOWED_IMAGE_EXT: ALLOWED_IMAGE_EXT,
+  uploadTaskFile: uploadTaskFile,
+  taskFileUrl: taskFileUrl,
+  ALLOWED_TASK_EXT: ALLOWED_TASK_EXT,
 };

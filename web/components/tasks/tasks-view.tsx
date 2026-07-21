@@ -443,6 +443,7 @@ export function TasksView() {
           <div className="min-h-0 flex-1">
             <KanbanBoard
               projectId={project.id}
+              clientName={project.clientName}
               tasks={projectTasks}
               assigneeNames={assigneeNames}
               onMove={handleMove}

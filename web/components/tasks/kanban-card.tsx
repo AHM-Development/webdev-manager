@@ -15,11 +15,13 @@ const priorityIconClass: Record<TaskPriority, string> = {
 
 export function TaskKanbanCard({
   task,
+  clientName,
   onChangeStatus,
   onOpenTask,
   showStatusControl = true,
 }: {
   task: Task;
+  clientName?: string;
   onChangeStatus?: (taskId: string, status: TaskStatus) => void;
   onOpenTask: (task: Task) => void;
   showStatusControl?: boolean;
@@ -27,7 +29,14 @@ export function TaskKanbanCard({
   const progress = checklistProgress(task);
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium text-gray-900">{task.title}</p>
+      <div className="space-y-0.5">
+        {clientName && (
+          <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            {clientName}
+          </p>
+        )}
+        <p className="text-sm font-medium text-gray-900">{task.title}</p>
+      </div>
       {task.dueDate && (
         <span className="block text-xs text-gray-400">{task.dueDate}</span>
       )}

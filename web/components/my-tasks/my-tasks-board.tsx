@@ -117,12 +117,14 @@ function applyMove(
 function StatusColumn({
   column,
   tasks,
+  getClientName,
   onMove,
   onChangeStatus,
   onOpenTask,
 }: {
   column: BoardColumn;
   tasks: Task[];
+  getClientName?: (task: Task) => string | undefined;
   onMove: (
     ids: string[],
     toStatus: TaskStatus,
@@ -212,6 +214,7 @@ function StatusColumn({
           >
             <TaskKanbanCard
               task={item}
+              clientName={getClientName?.(item)}
               onChangeStatus={onChangeStatus}
               onOpenTask={onOpenTask}
             />
@@ -252,6 +255,11 @@ export function MyTasksBoard() {
         label: project.clientName,
         meta: project.websites?.[0]?.url ?? project.liveLink ?? project.stagingLink,
       })),
+    [projects]
+  );
+
+  const clientNameById = useMemo(
+    () => new Map(projects.map((project) => [project.id, project.clientName])),
     [projects]
   );
 
@@ -416,6 +424,7 @@ export function MyTasksBoard() {
               tasks={myTasks.filter((task) =>
                 column.includes.includes(task.status)
               )}
+              getClientName={(task) => clientNameById.get(task.projectId)}
               onMove={handleMove}
               onChangeStatus={handleChangeStatus}
               onOpenTask={openTask}

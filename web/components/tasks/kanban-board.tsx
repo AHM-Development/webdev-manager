@@ -22,6 +22,7 @@ function tasksForColumn(
 
 export function KanbanBoard({
   projectId,
+  clientName,
   tasks,
   assigneeNames,
   onMove,
@@ -29,6 +30,7 @@ export function KanbanBoard({
   onOpenTask,
 }: {
   projectId: string;
+  clientName?: string;
   tasks: Task[];
   assigneeNames: string[];
   onMove: MoveHandler;
@@ -45,6 +47,7 @@ export function KanbanBoard({
         <KanbanColumn
           key={`${projectId}-${col}`}
           assignee={col}
+          clientName={clientName}
           tasks={tasksForColumn(tasks, col, knownAssignees)}
           onMove={onMove}
           onChangeStatus={onChangeStatus}

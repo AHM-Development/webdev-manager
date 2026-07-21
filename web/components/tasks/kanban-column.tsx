@@ -37,12 +37,14 @@ export type MoveHandler = (
 
 export function KanbanColumn({
   assignee,
+  clientName,
   tasks,
   onMove,
   onChangeStatus,
   onOpenTask,
 }: {
   assignee: string;
+  clientName?: string;
   tasks: Task[];
   onMove: MoveHandler;
   onChangeStatus: (taskId: string, status: TaskStatus) => void;
@@ -161,6 +163,7 @@ export function KanbanColumn({
           >
             <TaskKanbanCard
               task={item}
+              clientName={clientName}
               onChangeStatus={onChangeStatus}
               onOpenTask={onOpenTask}
             />

@@ -239,6 +239,46 @@ function wordpressFindings(snapshot, essentialPlugins, stalenessDays) {
   return output;
 }
 
+// A website label with its client for scan notifications, e.g.
+// "Main Website · Acme Health".
+function scanHeadline(website) {
+  var name = website.name || website.url;
+  return website.client_name ? name + ' · ' + website.client_name : name;
+}
+
+// Notify about a finished/failed scan. Managers (SA/Dev) always see the outcome
+// with full context (client, website, who started it); a staff requester who is
+// not already covered by a manager role gets their own copy. `message` may
+// contain a {starter} placeholder for the person who started the scan.
+async function notifyScanResult(kind, website, scan, title, message) {
+  if (!scan.requested_by) return;
+  var reqRows = await db.query(
+    'SELECT name, role FROM users WHERE id = :id LIMIT 1',
+    { id: scan.requested_by }
+  );
+  var starter = reqRows[0] || { name: 'Someone', role: 'staff' };
+  var body = message.replace('{starter}', starter.name || 'Someone');
+  var base = {
+    type: kind, title: title, message: body,
+    actionUrl: '/dashboard/website-health',
+    metadata: { scanId: String(scan.id), websiteId: String(website.id), clientName: website.client_name || null },
+  };
+  ['superadmin', 'developer'].forEach(function(role) {
+    notifications.dispatch(
+      notifications.CATEGORY.HEALTH,
+      Object.assign({ audienceType: 'role', audienceValue: role }, base),
+      null, null
+    ).catch(function() {});
+  });
+  if (starter.role === 'staff') {
+    notifications.dispatch(
+      notifications.CATEGORY.HEALTH,
+      Object.assign({ userId: scan.requested_by, audienceType: 'user' }, base),
+      null, null
+    ).catch(function() {});
+  }
+}
+
 async function processScan(scanId) {
   var scanRows = await db.query("SELECT * FROM website_health_scans WHERE id = :id AND status = 'queued' LIMIT 1", { id: scanId });
   if (!scanRows[0]) return;
@@ -354,26 +394,21 @@ async function processScan(scanId) {
       { id: scanId, status: partial ? 'partial' : 'completed', summary: JSON.stringify(scanSummary), result: JSON.stringify(audit) }
     );
     await emit(events.HEALTH_SCAN_COMPLETED, scanId, { websiteId: String(website.id), status: partial ? 'partial' : 'completed', progress: 100, summary: scanSummary });
-    if (scan.requested_by) {
-      var critical = (scanSummary && scanSummary.criticalIssues) || 0;
-      notifications.dispatch(notifications.CATEGORY.HEALTH, {
-        userId: scan.requested_by, audienceType: 'user', type: 'scan_completed',
-        title: critical > 0 ? 'Scan finished — ' + critical + ' critical issue(s)' : 'Website scan finished',
-        message: (website.name || website.url) + ' scored ' + (scanSummary && scanSummary.overall != null ? scanSummary.overall : '—') + '/100',
-        actionUrl: '/dashboard/website-health', metadata: { scanId: String(scanId), websiteId: String(website.id) },
-      }, null, null).catch(function() {});
-    }
+    var critical = (scanSummary && scanSummary.criticalIssues) || 0;
+    var score = scanSummary && scanSummary.overall != null ? scanSummary.overall : '—';
+    await notifyScanResult(
+      'scan_completed', website, scan,
+      critical > 0 ? 'Scan finished — ' + critical + ' critical issue(s)' : 'Website scan finished',
+      scanHeadline(website) + ' scored ' + score + '/100 · started by {starter}'
+    );
   } catch (err) {
     await db.query("UPDATE website_health_scans SET status = 'failed', stage = 'failed', error_message = :error, completed_at = UTC_TIMESTAMP() WHERE id = :id AND status <> 'cancelled'", { id: scanId, error: String(err.message || err).slice(0, 4000) });
     await emit(events.HEALTH_SCAN_FAILED, scanId, { websiteId: String(website.id), error: err.message || 'Scan failed.' });
-    if (scan.requested_by) {
-      notifications.dispatch(notifications.CATEGORY.HEALTH, {
-        userId: scan.requested_by, audienceType: 'user', type: 'scan_failed',
-        title: 'Website scan failed',
-        message: (website.name || website.url) + ' — ' + String(err.message || err).slice(0, 140),
-        actionUrl: '/dashboard/website-health', metadata: { scanId: String(scanId), websiteId: String(website.id) },
-      }, null, null).catch(function() {});
-    }
+    await notifyScanResult(
+      'scan_failed', website, scan,
+      'Website scan failed',
+      scanHeadline(website) + ' — ' + String(err.message || err).slice(0, 140) + ' · started by {starter}'
+    );
   }
 }
 

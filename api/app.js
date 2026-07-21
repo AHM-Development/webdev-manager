@@ -32,7 +32,15 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
+// Static uploads (task attachments, scan screenshots, form evidence) are served
+// from the API origin but embedded as <img>/links on the separate web origin.
+// Helmet's default Cross-Origin-Resource-Policy is 'same-origin', which makes
+// the browser refuse to render them cross-origin — relax it for these assets.
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: function(res) {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  }
+}));
 
 app.use('/', indexRouter);
 app.use('/api/v1', apiRouter);

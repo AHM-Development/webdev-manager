@@ -25,7 +25,7 @@ import {
 } from "@heroui/react";
 import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { FileText, Link2, X } from "lucide-react";
+import { FileText, Link2, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import type { DateValue, RangeValue } from "react-aria-components";
@@ -44,7 +44,7 @@ import {
   type TaskProjectOption,
 } from "./create-task-modal";
 import { editTaskSchema, type EditTaskValues } from "./schema";
-import { checklistProgress } from "./task-utils";
+import { checklistProgress, makeChecklistItem } from "./task-utils";
 import { ChecklistTextArea } from "./checklist-textarea";
 
 function toDateValue(value?: string): DateValue | null {
@@ -271,13 +271,20 @@ export function TaskDetailModal({
     setChecklist((current) => current.filter((item) => item.id !== itemId));
   };
 
+  const addChecklistItem = () => {
+    setChecklist((current) => [...current, makeChecklistItem("", current.length)]);
+  };
+
   const submit = form.handleSubmit(async (values) => {
+    const cleanedChecklist = checklist
+      .map((item) => ({ ...item, title: item.title.trim() }))
+      .filter((item) => item.title);
     await onUpdate({
       ...task,
       projectId: values.projectId,
       title: values.title.trim(),
       description: values.description.trim(),
-      checklist,
+      checklist: cleanedChecklist,
       attachments,
       assignee: values.assignee,
       assigneeUserId: values.assigneeUserId || undefined,
@@ -410,6 +417,14 @@ export function TaskDetailModal({
                         No checklist items yet.
                       </p>
                     )}
+                    <button
+                      type="button"
+                      onClick={addChecklistItem}
+                      className="flex items-center gap-1.5 rounded-md px-1 py-1 text-sm font-medium text-[#0b7de3] hover:text-[#0961ad]"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add item
+                    </button>
                   </div>
                 </div>
 

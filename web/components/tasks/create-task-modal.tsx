@@ -30,6 +30,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   FileText,
   Link2,
+  Plus,
   Sparkles,
   X,
 } from "lucide-react";
@@ -345,6 +346,7 @@ export function CreateTaskModal({
   const [checkedChecklistItems, setCheckedChecklistItems] = useState<Set<number>>(
     () => new Set()
   );
+  const [checklistItems, setChecklistItems] = useState<string[]>([]);
   const form = useForm<AddTaskValues>({
     resolver: zodResolver(addTaskSchema),
     defaultValues: {
@@ -363,7 +365,6 @@ export function CreateTaskModal({
   });
 
   const sourceText = form.watch("sourceText");
-  const checklistText = form.watch("checklistText");
 
   const attachments = useMemo<TaskAttachment[]>(
     () => {
@@ -389,11 +390,6 @@ export function CreateTaskModal({
     [organizedAttachments, removedLinks, sourceText]
   );
 
-  const checklistItems = useMemo(
-    () => checklistText.split("\n").map(cleanLine).filter(Boolean),
-    [checklistText]
-  );
-
   const reset = () => {
     form.reset({
       projectId: "",
@@ -413,6 +409,7 @@ export function CreateTaskModal({
     setOrganizedAttachments([]);
     setRemovedLinks(new Set());
     setCheckedChecklistItems(new Set());
+    setChecklistItems([]);
   };
 
   const close = () => {
@@ -442,15 +439,13 @@ export function CreateTaskModal({
       form.setValue("description", draft.description || values.sourceText, {
         shouldValidate: true,
       });
-      form.setValue(
-        "checklistText",
-        (draft.checklist ?? [])
-          .map((item) => item.title)
-          .filter(Boolean)
-          .join("\n") || checklistFrom(values.sourceText),
-        {
-          shouldValidate: true,
-        }
+      const aiChecklist = (draft.checklist ?? [])
+        .map((item) => cleanLine(item.title))
+        .filter(Boolean);
+      setChecklistItems(
+        aiChecklist.length
+          ? aiChecklist
+          : checklistFrom(values.sourceText).split("\n").filter(Boolean)
       );
       form.setValue("priority", draft.priority ?? "Medium", {
         shouldValidate: true,
@@ -480,16 +475,14 @@ export function CreateTaskModal({
   };
 
   const updateChecklistItem = (index: number, value: string) => {
-    const next = [...checklistItems];
-    next[index] = value;
-    form.setValue("checklistText", next.join("\n"), { shouldValidate: true });
+    setChecklistItems((current) =>
+      current.map((item, itemIndex) => (itemIndex === index ? value : item))
+    );
   };
 
   const removeChecklistItem = (index: number) => {
-    form.setValue(
-      "checklistText",
-      checklistItems.filter((_, itemIndex) => itemIndex !== index).join("\n"),
-      { shouldValidate: true }
+    setChecklistItems((current) =>
+      current.filter((_, itemIndex) => itemIndex !== index)
     );
     setCheckedChecklistItems((current) => {
       const next = new Set<number>();
@@ -499,6 +492,10 @@ export function CreateTaskModal({
       });
       return next;
     });
+  };
+
+  const addChecklistItem = () => {
+    setChecklistItems((current) => [...current, ""]);
   };
 
   const toggleChecklistItem = (index: number, isSelected: boolean) => {
@@ -527,13 +524,15 @@ export function CreateTaskModal({
       await organize();
       return;
     }
-    const checklist = values.checklistText
-      .split("\n")
-      .map(cleanLine)
-      .filter(Boolean)
-      .map((title, index) => ({
-        ...makeChecklistItem(title, index),
+    const checklist = checklistItems
+      .map((raw, index) => ({
+        title: cleanLine(raw),
         completed: checkedChecklistItems.has(index),
+      }))
+      .filter((item) => item.title)
+      .map((item, index) => ({
+        ...makeChecklistItem(item.title, index),
+        completed: item.completed,
       }));
 
     await onCreate({
@@ -708,9 +707,17 @@ export function CreateTaskModal({
                         ))}
                         {checklistItems.length === 0 && (
                           <p className="rounded-md border border-dashed border-slate-200 bg-white px-3 py-4 text-sm text-slate-400">
-                            No checklist items were generated.
+                            No checklist items yet.
                           </p>
                         )}
+                        <button
+                          type="button"
+                          onClick={addChecklistItem}
+                          className="flex items-center gap-1.5 rounded-md px-1 py-1 text-sm font-medium text-[#0b7de3] hover:text-[#0961ad]"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add item
+                        </button>
                       </div>
                     </div>
 

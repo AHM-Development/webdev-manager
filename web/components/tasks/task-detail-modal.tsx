@@ -562,8 +562,13 @@ export function TaskDetailModal({
                   {readOnly ? "Close" : "Cancel"}
                 </Button>
                 {!readOnly && (
-                  <Button type="submit" variant="primary">
-                    Save Changes
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    isPending={form.formState.isSubmitting}
+                    isDisabled={form.formState.isSubmitting}
+                  >
+                    {form.formState.isSubmitting ? "Saving..." : "Save Changes"}
                   </Button>
                 )}
               </ModalFooter>

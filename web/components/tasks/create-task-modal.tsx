@@ -869,9 +869,10 @@ export function CreateTaskModal({
                       <Button
                         type="submit"
                         variant="primary"
-                        isDisabled={isOrganizing}
+                        isPending={form.formState.isSubmitting}
+                        isDisabled={isOrganizing || form.formState.isSubmitting}
                       >
-                        Create Task
+                        {form.formState.isSubmitting ? "Creating..." : "Create Task"}
                       </Button>
                     </div>
                   </>

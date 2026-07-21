@@ -21,6 +21,8 @@ import {
   type NewTaskInput,
   type TaskAssigneeOption,
 } from "@/components/tasks/create-task-modal";
+import { TaskDetailModal } from "@/components/tasks/task-detail-modal";
+import type { Task } from "@/components/tasks/data";
 import {
   getStageDetail,
   listAssignableUsers,
@@ -29,7 +31,7 @@ import {
   type StageDetail,
   type StageUpdate,
 } from "@/libs/api/client-logs";
-import { createTask, listAssignees } from "@/libs/api/tasks";
+import { createTask, getTask, listAssignees, updateTask } from "@/libs/api/tasks";
 import { notify } from "@/libs/notify";
 
 import { StageMeetings } from "./stage-meetings";
@@ -78,6 +80,8 @@ export function StageDrawer({
   const [reason, setReason] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const createTaskState = useOverlayState();
+  const taskDetailState = useOverlayState();
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
 
   useEffect(() => {
     if (!state.isOpen) return;
@@ -162,6 +166,29 @@ export function StageDrawer({
     onSaved?.();
   };
 
+  // Open the full task modal (attachments, checklist, comments) for a linked task.
+  const openTask = async (taskId: string) => {
+    try {
+      setActiveTask(await getTask(taskId));
+      taskDetailState.open();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not open task.";
+      notify.error("Could not open task", { description: message });
+    }
+  };
+
+  const onUpdateTask = async (task: Task) => {
+    const { id, ...payload } = task;
+    await updateTask(id, payload);
+    if (stageId) setStage(await getStageDetail(stageId));
+    notify.success("Task updated");
+    onSaved?.();
+  };
+
+  const taskProjectOptions = stage?.projectId
+    ? [{ id: stage.projectId, label: stage.projectName ?? "Client" }]
+    : [];
+
   const meta = stage ? statusMeta(stage.status) : null;
 
   return (
@@ -227,12 +254,18 @@ export function StageDrawer({
                   {stage.tasks.length ? (
                     <ul className="space-y-1">
                       {stage.tasks.map((task) => (
-                        <li key={task.id} className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm">
-                          <span className="truncate">{task.title}</span>
-                          <span className="flex items-center gap-2 text-xs text-slate-500">
-                            {task.isCritical && <Chip size="sm" variant="soft" color="danger">Critical</Chip>}
-                            <span>{task.status}</span>
-                          </span>
+                        <li key={task.id}>
+                          <button
+                            type="button"
+                            onClick={() => void openTask(task.id)}
+                            className="flex w-full items-center justify-between gap-2 rounded-md border border-slate-200 px-3 py-2 text-left text-sm hover:border-blue-300 hover:bg-blue-50/50"
+                          >
+                            <span className="truncate">{task.title}</span>
+                            <span className="flex items-center gap-2 text-xs text-slate-500">
+                              {task.isCritical && <Chip size="sm" variant="soft" color="danger">Critical</Chip>}
+                              <span>{task.status}</span>
+                            </span>
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -390,6 +423,15 @@ export function StageDrawer({
         onCreate={onCreateTask}
       />
     )}
+    <TaskDetailModal
+      key={activeTask?.id ?? "none"}
+      state={taskDetailState}
+      task={activeTask}
+      projectOptions={taskProjectOptions}
+      assigneeOptions={taskAssignees}
+      onUpdate={onUpdateTask}
+      readOnly={!canEdit}
+    />
     </>
   );
 }

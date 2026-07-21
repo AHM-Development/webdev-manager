@@ -70,6 +70,13 @@ export async function listAssignees() {
   return data.assignees;
 }
 
+export async function getTask(taskId: string) {
+  const { data } = await apiClient.get<{ task: Task }>(
+    endpoints.tasks.detail(taskId)
+  );
+  return data.task;
+}
+
 export async function listTasks(filters?: {
   projectId?: string;
   status?: TaskStatus;

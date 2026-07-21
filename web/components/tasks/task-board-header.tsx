@@ -7,6 +7,7 @@ import type { Project } from "@/components/projects/data";
 
 export function TaskBoardHeader({
   project,
+  allClients = false,
   index,
   total,
   canPrev,
@@ -16,7 +17,8 @@ export function TaskBoardHeader({
   onOpenSwitcher,
   onAddTask,
 }: {
-  project: Project;
+  project: Project | null;
+  allClients?: boolean;
   index: number;
   total: number;
   canPrev: boolean;
@@ -44,10 +46,10 @@ export function TaskBoardHeader({
           type="button"
           onClick={onOpenSwitcher}
           className="flex items-center gap-2 rounded-md px-3 py-1.5 hover:bg-gray-100"
-          title="Switch project (⌘K)"
+          title="Switch client (⌘K)"
         >
           <span className="text-lg font-semibold text-gray-900">
-            {project.clientName}
+            {allClients ? "All clients" : project?.clientName ?? "All clients"}
           </span>
           <ChevronDown className="h-4 w-4 text-gray-400" />
         </button>
@@ -65,9 +67,11 @@ export function TaskBoardHeader({
       </div>
 
       <div className="flex items-center gap-3">
-        <span className="text-sm text-gray-400">
-          {index + 1} / {total}
-        </span>
+        {!allClients && (
+          <span className="text-sm text-gray-400">
+            {index + 1} / {total}
+          </span>
+        )}
         <Button variant="primary" size="sm" onPress={onAddTask}>
           <Plus className="h-4 w-4" />
           Add Task

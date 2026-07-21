@@ -36,6 +36,7 @@ import { TaskRequests } from "./task-requests";
 import { TaskSummary } from "./task-summary";
 
 const RECENTS_KEY = "wpm:recent-projects";
+const ALL_CLIENTS = "all";
 
 /** Tracks recently-viewed project ids (most recent first), persisted to localStorage. */
 function useRecents(currentId: string) {
@@ -133,13 +134,20 @@ export function TasksView() {
     ? !(activeTask?.requestedBy === user?.id && activeTask?.requestStatus === "pending")
     : false;
 
-  // Selected project comes from the URL (?project=id); default to the first.
+  // Board client selection comes from the URL (?project=id). Default (no param
+  // or ?project=all) shows every client's tasks on one board.
   const requested = params.get("project");
+  const isAllClients = !requested || requested === ALL_CLIENTS;
   const foundIndex = projects.findIndex((p) => p.id === requested);
   const index = foundIndex >= 0 ? foundIndex : 0;
-  const project = projects[index] ?? null;
+  const project = isAllClients ? null : projects[index] ?? null;
 
   const { recents, trackRecent } = useRecents(project?.id ?? "");
+
+  const clientNameById = useMemo(
+    () => new Map(projects.map((p) => [p.id, p.clientName])),
+    [projects]
+  );
 
   const projectTasks = useMemo(
     () => (project ? tasks.filter((t) => t.projectId === project.id) : []),
@@ -199,7 +207,7 @@ export function TasksView() {
 
   const goTo = (id?: string) => {
     if (!id) return;
-    trackRecent(id);
+    if (id !== ALL_CLIENTS) trackRecent(id);
     router.replace(`/dashboard/tasks?project=${id}`, { scroll: false });
   };
 
@@ -210,9 +218,12 @@ export function TasksView() {
       targetId?: string,
       position?: "before" | "after"
     ) => {
-      if (!project) return;
       setTasks((prev) => {
-        const next = applyMove(prev, project.id, ids, toAssignee, targetId, position);
+        // Reorder within the moved task's own project (works in single-client
+        // and all-clients board modes alike).
+        const movedProjectId = prev.find((t) => ids.includes(t.id))?.projectId;
+        if (!movedProjectId) return prev;
+        const next = applyMove(prev, movedProjectId, ids, toAssignee, targetId, position);
         void moveTasks(
           ids.map((id, index) => ({
             id,
@@ -231,7 +242,7 @@ export function TasksView() {
         return next;
       });
     },
-    [load, project]
+    [load]
   );
 
   const handleCreate = useCallback(async (input: NewTaskInput) => {
@@ -422,7 +433,7 @@ export function TasksView() {
         <div className="flex min-h-0 flex-1 items-center justify-center pt-4 text-sm text-slate-500">
           Loading tasks...
         </div>
-      ) : !project ? (
+      ) : projects.length === 0 ? (
         <div className="flex min-h-0 flex-1 items-center justify-center pt-4 text-center text-sm text-slate-500">
           Add a project first before creating tasks.
         </div>
@@ -430,10 +441,11 @@ export function TasksView() {
         <div className="flex min-h-0 flex-1 flex-col gap-4 pt-4">
           <TaskBoardHeader
             project={project}
+            allClients={isAllClients}
             index={index}
             total={projects.length}
-            canPrev={index > 0}
-            canNext={index < projects.length - 1}
+            canPrev={!isAllClients && index > 0}
+            canNext={!isAllClients && index < projects.length - 1}
             onPrev={() => goTo(projects[index - 1]?.id)}
             onNext={() => goTo(projects[index + 1]?.id)}
             onOpenSwitcher={switcher.open}
@@ -442,9 +454,14 @@ export function TasksView() {
 
           <div className="min-h-0 flex-1">
             <KanbanBoard
-              projectId={project.id}
-              clientName={project.clientName}
-              tasks={projectTasks}
+              projectId={project?.id ?? ALL_CLIENTS}
+              clientName={project?.clientName}
+              getClientName={
+                isAllClients
+                  ? (task) => clientNameById.get(task.projectId)
+                  : undefined
+              }
+              tasks={isAllClients ? tasks : projectTasks}
               assigneeNames={assigneeNames}
               onMove={handleMove}
               onChangeStatus={handleChangeStatus}

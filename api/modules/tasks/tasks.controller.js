@@ -1,4 +1,5 @@
 var service = require('./tasks.service');
+var comments = require('./task-comments.service');
 var uploads = require('../../lib/uploads');
 
 function context(req) {
@@ -150,12 +151,47 @@ async function uploadAttachment(req, res, next) {
   }
 }
 
+async function listComments(req, res, next) {
+  try {
+    res.json({ comments: await comments.listComments(req.params.taskId) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function createComment(req, res, next) {
+  try {
+    res.status(201).json({
+      comment: await comments.createComment(
+        req.params.taskId,
+        req.body || {},
+        req.user,
+        context(req)
+      ),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function deleteComment(req, res, next) {
+  try {
+    await comments.deleteComment(req.params.taskId, req.params.commentId, req.user);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   list: list,
   mine: mine,
   assignees: assignees,
   get: get,
   uploadAttachment: uploadAttachment,
+  listComments: listComments,
+  createComment: createComment,
+  deleteComment: deleteComment,
   create: create,
   update: update,
   updateStatus: updateStatus,

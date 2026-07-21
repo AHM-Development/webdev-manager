@@ -34,4 +34,10 @@ router.delete('/:taskId', auth.requireRoles(roles.STAFF_WRITE_ROLES), controller
 router.post('/:taskId/approve', auth.requireRoles(roles.WRITE_ROLES), controller.approve);
 router.post('/:taskId/reject', auth.requireRoles(roles.WRITE_ROLES), controller.reject);
 
+// Task comments (threaded, with @mentions). Any authenticated task viewer may
+// read and post; deletion is restricted to the author or a Super Admin.
+router.get('/:taskId/comments', controller.listComments);
+router.post('/:taskId/comments', controller.createComment);
+router.delete('/:taskId/comments/:commentId', controller.deleteComment);
+
 module.exports = router;

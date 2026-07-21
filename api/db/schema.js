@@ -298,6 +298,32 @@ async function ensureSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  // Threaded task comments (two levels: a comment and its replies). Mentions
+  // holds the resolved user ids referenced by @[Name](id) tokens in the body.
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS task_comments (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      task_id BIGINT UNSIGNED NOT NULL,
+      parent_id BIGINT UNSIGNED NULL,
+      author_user_id BIGINT UNSIGNED NULL,
+      body TEXT NOT NULL,
+      mentions JSON NULL,
+      deleted_at DATETIME NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY task_comments_task_idx (task_id),
+      KEY task_comments_parent_idx (parent_id),
+      KEY task_comments_deleted_idx (deleted_at),
+      CONSTRAINT task_comments_task_fk FOREIGN KEY (task_id)
+        REFERENCES tasks(id) ON DELETE CASCADE,
+      CONSTRAINT task_comments_parent_fk FOREIGN KEY (parent_id)
+        REFERENCES task_comments(id) ON DELETE CASCADE,
+      CONSTRAINT task_comments_author_fk FOREIGN KEY (author_user_id)
+        REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
   await db.query(`
     CREATE TABLE IF NOT EXISTS notes (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

@@ -48,6 +48,7 @@ import { checklistProgress, makeChecklistItem } from "./task-utils";
 import { AttachmentCard } from "./attachment-card";
 import { AttachmentUploader } from "./attachment-uploader";
 import { ChecklistTextArea } from "./checklist-textarea";
+import { TaskComments } from "./task-comments";
 
 function toDateValue(value?: string): DateValue | null {
   if (!value) return null;
@@ -536,6 +537,12 @@ export function TaskDetailModal({
                   )}
                 </div>
                </fieldset>
+
+                {task?.id && (
+                  <div className="mt-6 border-t border-slate-100 pt-5">
+                    <TaskComments taskId={task.id} users={assigneeOptions} />
+                  </div>
+                )}
               </ModalBody>
 
               <ModalFooter className="flex justify-end gap-2">

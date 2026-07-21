@@ -136,6 +136,7 @@ function rowToTask(row) {
   return {
     id: String(row.id),
     projectId: String(row.project_id),
+    clientName: row.client_name || null,
     title: row.title,
     description: row.description || '',
     checklist: normalizeChecklist(parseJson(row.checklist, [])),
@@ -166,10 +167,12 @@ function rowToTask(row) {
 
 async function getTask(taskId) {
   var rows = await db.query(
-    `SELECT t.*, rq.name AS requested_by_name, rv.name AS reviewed_by_name
+    `SELECT t.*, rq.name AS requested_by_name, rv.name AS reviewed_by_name,
+            p.client_name AS client_name
      FROM tasks t
      LEFT JOIN users rq ON rq.id = t.requested_by
      LEFT JOIN users rv ON rv.id = t.reviewed_by
+     LEFT JOIN projects p ON p.id = t.project_id
      WHERE t.id = :taskId AND t.deleted_at IS NULL LIMIT 1`,
     { taskId: taskId }
   );
@@ -239,10 +242,12 @@ async function listTasks(filters, user) {
   }
 
   var rows = await db.query(
-    `SELECT t.*, rq.name AS requested_by_name, rv.name AS reviewed_by_name
+    `SELECT t.*, rq.name AS requested_by_name, rv.name AS reviewed_by_name,
+            p.client_name AS client_name
      FROM tasks t
      LEFT JOIN users rq ON rq.id = t.requested_by
      LEFT JOIN users rv ON rv.id = t.reviewed_by
+     LEFT JOIN projects p ON p.id = t.project_id
      WHERE ` + where.join(' AND ') + `
      ORDER BY t.sort_order ASC, t.due_date IS NULL ASC, t.due_date ASC, t.updated_at DESC`,
     params
@@ -322,15 +327,52 @@ async function applyTaskLinkFields(taskId, input) {
   await db.query('UPDATE tasks SET ' + sets.join(', ') + ' WHERE id = :taskId AND deleted_at IS NULL', params);
 }
 
+// --- Notification copy helpers -------------------------------------------
+// Build human, detailed messages so a notification stands on its own:
+//   "Fix homepage banner" · Acme Health — High priority, due 2026-07-25
+function taskHeadline(task) {
+  var title = (task && task.title ? String(task.title).trim() : '') || 'Untitled task';
+  var client = task && task.clientName ? String(task.clientName).trim() : '';
+  return '"' + title + '"' + (client ? ' · ' + client : '');
+}
+function taskExtras(task) {
+  var bits = [];
+  if (task && task.priority) bits.push(task.priority + ' priority');
+  if (task && task.dueDate) bits.push('due ' + task.dueDate);
+  if (task && task.assignee && task.assignee !== 'Unassigned') bits.push('assigned to ' + task.assignee);
+  return bits.length ? ' — ' + bits.join(', ') : '';
+}
+function actorName(actor) {
+  return (actor && (actor.name || actor.email)) || 'a teammate';
+}
+function taskActionUrl(task) {
+  return '/dashboard/tasks?task=' + encodeURIComponent(task.id);
+}
+function taskMeta(task) {
+  return { taskId: task.id, projectId: task.projectId, clientName: task.clientName || null };
+}
+
 // Best-effort notifications for task assignment / review. Never blocks or throws
 // into the caller; skips notifying the actor about their own change.
-function notifyAssignee(task, actor, context, prevAssigneeId) {
-  if (task.assigneeUserId && String(task.assigneeUserId) !== String(actor.id) &&
-      String(task.assigneeUserId) !== String(prevAssigneeId || '')) {
+// `action` ('created' | 'updated') controls the copy when the assignee is
+// unchanged: a plain update tells the assignee it was updated, not re-assigned.
+function notifyAssignee(task, actor, context, prevAssigneeId, action) {
+  if (!task.assigneeUserId) return;
+  if (String(task.assigneeUserId) === String(actor.id)) return; // don't ping the actor about their own change
+  var reassigned = String(task.assigneeUserId) !== String(prevAssigneeId || '');
+  if (reassigned) {
     notifications.dispatch(notifications.CATEGORY.TASK_ASSIGNMENT, {
       userId: task.assigneeUserId, audienceType: 'user', type: 'task_assigned',
-      title: 'New task assigned to you', message: task.title,
-      actionUrl: '/dashboard/tasks', metadata: { taskId: task.id, projectId: task.projectId },
+      title: 'New task assigned to you',
+      message: taskHeadline(task) + taskExtras(task),
+      actionUrl: taskActionUrl(task), metadata: taskMeta(task),
+    }, actor, context).catch(function() {});
+  } else if (action === 'updated') {
+    notifications.dispatch(notifications.CATEGORY.TASK_ASSIGNMENT, {
+      userId: task.assigneeUserId, audienceType: 'user', type: 'task_updated',
+      title: 'A task assigned to you was updated',
+      message: actorName(actor) + ' updated ' + taskHeadline(task) + taskExtras(task),
+      actionUrl: taskActionUrl(task), metadata: taskMeta(task),
     }, actor, context).catch(function() {});
   }
 }
@@ -339,8 +381,9 @@ function notifyReviewer(task, actor, context, prevReviewerId) {
       String(task.reviewerUserId) !== String(prevReviewerId || '')) {
     notifications.dispatch(notifications.CATEGORY.REVIEW, {
       userId: task.reviewerUserId, audienceType: 'user', type: 'task_review',
-      title: 'You were added as reviewer', message: task.title,
-      actionUrl: '/dashboard/tasks', metadata: { taskId: task.id, projectId: task.projectId },
+      title: 'You were added as reviewer',
+      message: 'Review ' + taskHeadline(task) + taskExtras(task),
+      actionUrl: taskActionUrl(task), metadata: taskMeta(task),
     }, actor, context).catch(function() {});
   }
 }
@@ -429,7 +472,7 @@ async function createTask(input, user, context) {
   if (asRequest) {
     notifyRequestSubmitted(task, user, context);
   } else {
-    notifyAssignee(task, user, context, null);
+    notifyAssignee(task, user, context, null, 'created');
     notifyReviewer(task, user, context, null);
   }
   taskBus.emitTaskChange('created', task);
@@ -448,6 +491,9 @@ async function approveRequest(taskId, user, context) {
   var updated = await getTask(taskId);
   await logTaskActivity(user, context, 'tasks.request_approved', updated);
   notifyRequestDecided(updated, user, context, 'approved');
+  // The task now goes live on the assignee's board — let them know.
+  notifyAssignee(updated, user, context, null, 'created');
+  notifyReviewer(updated, user, context, null);
   taskBus.emitTaskChange('approved', updated);
   return updated;
 }
@@ -472,8 +518,9 @@ function notifyRequestSubmitted(task, actor, context) {
   ['superadmin', 'developer'].forEach(function(role) {
     notifications.dispatch(notifications.CATEGORY.TASK_ASSIGNMENT, {
       audienceType: 'role', audienceValue: role, type: 'task_request_submitted',
-      title: 'New task request', message: (actor.name || 'A staff member') + ' requested: ' + task.title,
-      actionUrl: '/dashboard/tasks', metadata: { taskId: task.id },
+      title: 'New task request',
+      message: actorName(actor) + ' requested ' + taskHeadline(task) + taskExtras(task),
+      actionUrl: '/dashboard/tasks', metadata: taskMeta(task),
     }, actor, context).catch(function() {});
   });
 }
@@ -483,8 +530,9 @@ function notifyRequestDecided(task, actor, context, decision) {
   if (!task.requestedBy) return;
   notifications.dispatch(notifications.CATEGORY.TASK_ASSIGNMENT, {
     userId: task.requestedBy, audienceType: 'user', type: 'task_request_' + decision,
-    title: 'Task request ' + decision, message: '"' + task.title + '" was ' + decision + '.',
-    actionUrl: '/dashboard/tasks', metadata: { taskId: task.id },
+    title: 'Task request ' + decision,
+    message: taskHeadline(task) + ' was ' + decision + ' by ' + actorName(actor) + '.',
+    actionUrl: taskActionUrl(task), metadata: taskMeta(task),
   }, actor, context).catch(function() {});
 }
 
@@ -526,7 +574,7 @@ async function updateTask(taskId, input, user, context) {
   await applyTaskLinkFields(taskId, input || {});
   var task = await getTask(taskId);
   await logTaskActivity(user, context, 'tasks.update', task);
-  notifyAssignee(task, user, context, before.assigneeUserId);
+  notifyAssignee(task, user, context, before.assigneeUserId, 'updated');
   notifyReviewer(task, user, context, before.reviewerUserId);
   taskBus.emitTaskChange('updated', task);
   return task;
@@ -548,8 +596,9 @@ async function updateStatus(taskId, status, user, context) {
   if (normalized === 'Review' && task.reviewerUserId && String(task.reviewerUserId) !== String(user.id)) {
     notifications.dispatch(notifications.CATEGORY.REVIEW, {
       userId: task.reviewerUserId, audienceType: 'user', type: 'task_review_ready',
-      title: 'A task is ready for your review', message: task.title,
-      actionUrl: '/dashboard/tasks', metadata: { taskId: task.id, projectId: task.projectId },
+      title: 'A task is ready for your review',
+      message: taskHeadline(task) + ' is ready for review' + taskExtras(task),
+      actionUrl: taskActionUrl(task), metadata: taskMeta(task),
     }, user, context).catch(function() {});
   }
   taskBus.emitTaskChange('updated', task);

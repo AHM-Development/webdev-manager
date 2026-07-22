@@ -108,8 +108,6 @@ export const endpoints = {
     status: (taskId: string) => `/tasks/${taskId}/status`,
     delete: (taskId: string) => `/tasks/${taskId}`,
     move: "/tasks/move",
-    approve: (taskId: string) => `/tasks/${taskId}/approve`,
-    reject: (taskId: string) => `/tasks/${taskId}/reject`,
     comments: (taskId: string) => `/tasks/${taskId}/comments`,
     comment: (taskId: string, commentId: string) =>
       `/tasks/${taskId}/comments/${commentId}`,

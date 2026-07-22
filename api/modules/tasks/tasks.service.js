@@ -231,16 +231,6 @@ async function listTasks(filters, user) {
     params.requestStatus = filters.requestStatus;
   }
 
-  // The Task Requests view: only tasks that went through the request flow.
-  // Staff are scoped to their own requests; SA/Dev see everyone's.
-  if (filters.requests) {
-    where.push('t.requested_by IS NOT NULL');
-    if (isStaff(user)) {
-      where.push('t.requested_by = :requesterId');
-      params.requesterId = user.id;
-    }
-  }
-
   var rows = await db.query(
     `SELECT t.*, rq.name AS requested_by_name, rv.name AS reviewed_by_name,
             p.client_name AS client_name
@@ -403,34 +393,18 @@ async function createTask(input, user, context) {
   input = input || {};
   var payload = await normalizePayload(input, false);
   var sortOrder = await nextSortOrder(payload.projectId);
-  // A task can be raised as a request ON BEHALF OF a named requester (e.g. Viktor
-  // creating for whoever asked) — it becomes pending and owned by that person, so
-  // it lands in the review queue. Otherwise: staff -> pending, SA/Dev -> approved.
-  var onBehalfOf = null;
+  // Tasks go straight to the board (with an assignee → that developer's column,
+  // otherwise the Unassigned/backlog column). An optional requestor (e.g. Viktor
+  // acting on someone's behalf) is recorded for attribution only; there is no
+  // longer an approval step.
+  var requestedBy = null;
   if (input.requestedByUserId) {
-    onBehalfOf = Number(input.requestedByUserId);
+    requestedBy = Number(input.requestedByUserId);
   } else if (input.requestor) {
-    onBehalfOf = await resolveRequestor(input.requestor);
-    if (!onBehalfOf) fail(400, 'REQUESTOR_UNKNOWN', 'Requestor "' + input.requestor + '" is not a registered active user.');
+    requestedBy = await resolveRequestor(input.requestor);
+    if (!requestedBy) fail(400, 'REQUESTOR_UNKNOWN', 'Requestor "' + input.requestor + '" is not a registered active user.');
   }
-  var hasAssignee = !!payload.assigneeUserId ||
-    (payload.assigneeName && payload.assigneeName !== 'Unassigned');
-
-  var requestStatus;
-  var requestedBy;
-  if (onBehalfOf != null) {
-    // Raised on behalf of a requestor (e.g. Viktor). WITH an assignee it goes
-    // straight to that developer's backlog; WITHOUT one it waits for review.
-    requestStatus = hasAssignee ? 'approved' : 'pending';
-    requestedBy = onBehalfOf;
-  } else if (isStaff(user)) {
-    requestStatus = 'pending';
-    requestedBy = user.id;
-  } else {
-    requestStatus = 'approved';
-    requestedBy = null;
-  }
-  var asRequest = requestStatus === 'pending';
+  var requestStatus = 'approved';
   var result = await db.query(
     `INSERT INTO tasks
       (project_id, website_id, stage_id, title, description, checklist, attachments, status, priority,
@@ -468,72 +442,11 @@ async function createTask(input, user, context) {
     }
   );
   var task = await getTask(result.insertId);
-  await logTaskActivity(user, context, asRequest ? 'tasks.request' : 'tasks.create', task);
-  if (asRequest) {
-    notifyRequestSubmitted(task, user, context);
-  } else {
-    notifyAssignee(task, user, context, null, 'created');
-    notifyReviewer(task, user, context, null);
-  }
+  await logTaskActivity(user, context, 'tasks.create', task);
+  notifyAssignee(task, user, context, null, 'created');
+  notifyReviewer(task, user, context, null);
   taskBus.emitTaskChange('created', task);
   return task;
-}
-
-// ---- task-request approval flow ----
-async function approveRequest(taskId, user, context) {
-  var task = await getTask(taskId);
-  if (task.requestStatus !== 'pending') fail(400, 'NOT_PENDING', 'Only a pending request can be approved.');
-  await db.query(
-    `UPDATE tasks SET request_status = 'approved', reviewed_by = :userId, reviewed_at = UTC_TIMESTAMP(),
-            updated_by = :userId WHERE id = :taskId AND deleted_at IS NULL`,
-    { taskId: taskId, userId: user.id }
-  );
-  var updated = await getTask(taskId);
-  await logTaskActivity(user, context, 'tasks.request_approved', updated);
-  notifyRequestDecided(updated, user, context, 'approved');
-  // The task now goes live on the assignee's board — let them know.
-  notifyAssignee(updated, user, context, null, 'created');
-  notifyReviewer(updated, user, context, null);
-  taskBus.emitTaskChange('approved', updated);
-  return updated;
-}
-
-async function rejectRequest(taskId, user, context) {
-  var task = await getTask(taskId);
-  if (task.requestStatus !== 'pending') fail(400, 'NOT_PENDING', 'Only a pending request can be rejected.');
-  await db.query(
-    `UPDATE tasks SET request_status = 'rejected', reviewed_by = :userId, reviewed_at = UTC_TIMESTAMP(),
-            updated_by = :userId WHERE id = :taskId AND deleted_at IS NULL`,
-    { taskId: taskId, userId: user.id }
-  );
-  var updated = await getTask(taskId);
-  await logTaskActivity(user, context, 'tasks.request_rejected', updated);
-  notifyRequestDecided(updated, user, context, 'rejected');
-  taskBus.emitTaskChange('rejected', updated);
-  return updated;
-}
-
-// Notify managers (SA/Dev) that a new task request needs review. Best-effort.
-function notifyRequestSubmitted(task, actor, context) {
-  ['superadmin', 'developer'].forEach(function(role) {
-    notifications.dispatch(notifications.CATEGORY.TASK_ASSIGNMENT, {
-      audienceType: 'role', audienceValue: role, type: 'task_request_submitted',
-      title: 'New task request',
-      message: actorName(actor) + ' requested ' + taskHeadline(task) + taskExtras(task),
-      actionUrl: '/dashboard/tasks', metadata: taskMeta(task),
-    }, actor, context).catch(function() {});
-  });
-}
-
-// Notify the requester of the approve/reject decision. Best-effort.
-function notifyRequestDecided(task, actor, context, decision) {
-  if (!task.requestedBy) return;
-  notifications.dispatch(notifications.CATEGORY.TASK_ASSIGNMENT, {
-    userId: task.requestedBy, audienceType: 'user', type: 'task_request_' + decision,
-    title: 'Task request ' + decision,
-    message: taskHeadline(task) + ' was ' + decision + ' by ' + actorName(actor) + '.',
-    actionUrl: taskActionUrl(task), metadata: taskMeta(task),
-  }, actor, context).catch(function() {});
 }
 
 async function updateTask(taskId, input, user, context) {
@@ -703,6 +616,4 @@ module.exports = {
   updateStatus: updateStatus,
   moveTasks: moveTasks,
   deleteTask: deleteTask,
-  approveRequest: approveRequest,
-  rejectRequest: rejectRequest,
 };

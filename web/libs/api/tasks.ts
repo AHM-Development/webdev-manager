@@ -91,24 +91,6 @@ export async function listTasks(filters?: {
   return data.tasks;
 }
 
-/** Task requests — the server scopes Staff to their own; SA/Dev see all. */
-export async function listTaskRequests() {
-  const { data } = await apiClient.get<{ tasks: Task[] }>(endpoints.tasks.list, {
-    params: { requests: true },
-  });
-  return data.tasks;
-}
-
-export async function approveTaskRequest(taskId: string) {
-  const { data } = await apiClient.post<{ task: Task }>(endpoints.tasks.approve(taskId));
-  return data.task;
-}
-
-export async function rejectTaskRequest(taskId: string) {
-  const { data } = await apiClient.post<{ task: Task }>(endpoints.tasks.reject(taskId));
-  return data.task;
-}
-
 export async function listMyTasks(filters?: { projectId?: string }) {
   const { data } = await apiClient.get<{ tasks: Task[] }>(endpoints.tasks.my, {
     params: filters,

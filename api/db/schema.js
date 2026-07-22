@@ -1183,6 +1183,9 @@ async function ensureSchema() {
   await alterIgnoreDuplicate('ALTER TABLE tasks ADD COLUMN reviewed_at DATETIME NULL AFTER reviewed_by');
   await alterIgnoreDuplicate('ALTER TABLE tasks ADD KEY tasks_request_status_idx (request_status)');
   await alterIgnoreDuplicate('ALTER TABLE tasks ADD KEY tasks_requested_by_idx (requested_by)');
+  // The approval flow was removed — every task now lives on the board. Promote
+  // any tasks still waiting in the old pending queue so they aren't stranded.
+  await db.query("UPDATE tasks SET request_status = 'approved' WHERE request_status = 'pending'");
 
   // Additional notification categories (existing DBs).
   await alterIgnoreDuplicate("ALTER TABLE notification_settings ADD COLUMN reviews_channel ENUM('off','email','discord','both') NOT NULL DEFAULT 'both'");

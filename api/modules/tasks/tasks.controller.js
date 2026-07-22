@@ -114,21 +114,6 @@ async function remove(req, res, next) {
   }
 }
 
-async function approve(req, res, next) {
-  try {
-    res.json({ task: await service.approveRequest(req.params.taskId, req.user, context(req)) });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function reject(req, res, next) {
-  try {
-    res.json({ task: await service.rejectRequest(req.params.taskId, req.user, context(req)) });
-  } catch (err) {
-    next(err);
-  }
-}
 
 async function uploadAttachment(req, res, next) {
   try {
@@ -197,6 +182,4 @@ module.exports = {
   updateStatus: updateStatus,
   move: move,
   remove: remove,
-  approve: approve,
-  reject: reject,
 };

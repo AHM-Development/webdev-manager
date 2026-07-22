@@ -7,13 +7,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Project } from "@/components/projects/data";
 import { listProjects } from "@/libs/api/projects";
 import {
-  approveTaskRequest,
   createTask,
   listAssignees,
-  listTaskRequests,
   listTasks,
   moveTasks,
-  rejectTaskRequest,
   updateTask,
   updateTaskStatus,
 } from "@/libs/api/tasks";
@@ -32,7 +29,6 @@ import { KanbanBoard } from "./kanban-board";
 import { ProjectSwitcher } from "./project-switcher";
 import { TaskBoardHeader } from "./task-board-header";
 import { TaskDetailModal } from "./task-detail-modal";
-import { TaskRequests } from "./task-requests";
 import { TaskSummary } from "./task-summary";
 
 const RECENTS_KEY = "wpm:recent-projects";
@@ -115,24 +111,20 @@ export function TasksView() {
   const switcher = useOverlayState();
   const addTask = useOverlayState();
   const detailState = useOverlayState();
-  const [tab, setTab] = useState<"summary" | "requests" | "board">("summary");
+  const [tab, setTab] = useState<"summary" | "board">("summary");
 
   const role = user?.role;
   const isSuperAdmin = role === "superadmin";
   const isStaff = role === "staff";
-  const canReview = role === "superadmin" || role === "developer";
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [requests, setRequests] = useState<Task[]>([]);
   const [assignees, setAssignees] = useState<TaskAssigneeOption[]>([]);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Staff may edit only their own request while it's still pending.
-  const detailReadOnly = isStaff
-    ? !(activeTask?.requestedBy === user?.id && activeTask?.requestStatus === "pending")
-    : false;
+  // Staff view tasks read-only; they don't manage the board.
+  const detailReadOnly = isStaff;
 
   // Board client selection comes from the URL (?project=id). Default (no param
   // or ?project=all) shows every client's tasks on one board.
@@ -181,15 +173,13 @@ export function TasksView() {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [projectRows, taskRows, assigneeRows, requestRows] = await Promise.all([
+      const [projectRows, taskRows, assigneeRows] = await Promise.all([
         listProjects(),
-        listTasks({ requestStatus: "approved" }),
+        listTasks(),
         listAssignees(),
-        listTaskRequests(),
       ]);
       setProjects(projectRows);
       setTasks(taskRows);
-      setRequests(requestRows);
       setAssignees(
         assigneeRows.map((member) => ({ id: member.id, name: member.name }))
       );
@@ -247,40 +237,8 @@ export function TasksView() {
 
   const handleCreate = useCallback(async (input: NewTaskInput) => {
     const created = await createTask(input);
-    if (created.requestStatus === "approved") {
-      setTasks((prev) => [created, ...prev]);
-      notify.success("Task created", { description: created.title });
-    } else {
-      setRequests((prev) => [created, ...prev]);
-      notify.success("Task request submitted", {
-        description: "A manager will review it shortly.",
-      });
-    }
-  }, []);
-
-  const handleApprove = useCallback(async (taskId: string) => {
-    try {
-      const updated = await approveTaskRequest(taskId);
-      setRequests((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-      setTasks((prev) => [updated, ...prev.filter((t) => t.id !== updated.id)]);
-      notify.success("Request approved", { description: updated.title });
-    } catch (err) {
-      notify.error("Could not approve request", {
-        description: (err as Error).message ?? "Please try again.",
-      });
-    }
-  }, []);
-
-  const handleReject = useCallback(async (taskId: string) => {
-    try {
-      const updated = await rejectTaskRequest(taskId);
-      setRequests((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-      notify.success("Request rejected", { description: updated.title });
-    } catch (err) {
-      notify.error("Could not reject request", {
-        description: (err as Error).message ?? "Please try again.",
-      });
-    }
+    setTasks((prev) => [created, ...prev]);
+    notify.success("Task created", { description: created.title });
   }, []);
 
   const handleChangeStatus = useCallback(
@@ -312,25 +270,16 @@ export function TasksView() {
   );
 
   // Live updates: reflect task changes from anyone (other users, Viktor) without
-  // a refresh. The server scopes which clients receive pending requests.
+  // a refresh.
   const handleTaskChanged = useCallback(
     (payload: { action: string; task: Task }) => {
       const { action, task } = payload;
       if (!task || !task.id) return;
       if (action === "deleted") {
         setTasks((prev) => prev.filter((t) => t.id !== task.id));
-        setRequests((prev) => prev.filter((t) => t.id !== task.id));
         return;
       }
-      const upsert = (list: Task[]) => [task, ...list.filter((t) => t.id !== task.id)];
-      if (task.requestStatus === "approved") {
-        setTasks((prev) => upsert(prev)); // on the board/summary
-        setRequests((prev) => prev.map((t) => (t.id === task.id ? task : t)));
-      } else {
-        // pending / rejected request — not on the board
-        setRequests((prev) => (task.requestedBy ? upsert(prev) : prev));
-        setTasks((prev) => prev.filter((t) => t.id !== task.id));
-      }
+      setTasks((prev) => [task, ...prev.filter((t) => t.id !== task.id)]);
       setActiveTask((current) => (current && current.id === task.id ? task : current));
     },
     []
@@ -352,7 +301,6 @@ export function TasksView() {
       dueDate: updatedTask.dueDate,
     });
     setTasks((prev) => prev.map((task) => (task.id === saved.id ? saved : task)));
-    setRequests((prev) => prev.map((task) => (task.id === saved.id ? saved : task)));
     setActiveTask(saved);
     notify.success("Task updated", { description: saved.title });
   }, []);
@@ -369,14 +317,13 @@ export function TasksView() {
     return () => window.removeEventListener("keydown", onKey);
   }, [switcher]);
 
-  // Board is Super-Admin only; everyone gets Summary + Requests.
+  // Board is Super-Admin only; everyone gets the Summary.
   const TABS = [
     { id: "summary", label: "Task Summary" },
-    { id: "requests", label: "Task Requests" },
     ...(isSuperAdmin ? [{ id: "board", label: "Board" } as const] : []),
   ] as const;
 
-  const addTaskLabel = isStaff ? "Request Task" : "Add Task";
+  const addTaskLabel = "Add Task";
 
   return (
     <div className="flex h-full flex-col">
@@ -414,19 +361,6 @@ export function TasksView() {
                 setTab("board");
               }
             }}
-          />
-        </div>
-      ) : tab === "requests" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto pt-4">
-          <TaskRequests
-            requests={requests}
-            projects={projects}
-            canReview={canReview}
-            onApprove={handleApprove}
-            onReject={handleReject}
-            onOpenTask={openTask}
-            onAddTask={addTask.open}
-            addTaskLabel={addTaskLabel}
           />
         </div>
       ) : isLoading ? (

@@ -54,94 +54,48 @@ function baseTask(overrides) {
   }, overrides || {});
 }
 
-test('a staff-created task becomes a pending request owned by the staffer', async () => {
-  reset();
-  taskRow = baseTask({ request_status: 'pending', requested_by: 5 });
-  await service.createTask({ projectId: '3', title: 'Please build X' }, staff, ctx);
-  const insert = calls.find((c) => /INSERT INTO tasks/.test(c.sql));
-  assert.equal(insert.params.requestStatus, 'pending');
-  assert.equal(insert.params.requestedBy, 5);
-  // managers get notified
-  assert.ok(dispatched.some((d) => d.input.type === 'task_request_submitted'));
-});
-
-test('a developer-created task is approved immediately (not a request)', async () => {
+test('a staff-created task goes straight to the board (no approval)', async () => {
   reset();
   taskRow = baseTask();
-  await service.createTask({ projectId: '3', title: 'Direct task' }, dev, ctx);
+  await service.createTask({ projectId: '3', title: 'Please build X' }, staff, ctx);
   const insert = calls.find((c) => /INSERT INTO tasks/.test(c.sql));
   assert.equal(insert.params.requestStatus, 'approved');
   assert.equal(insert.params.requestedBy, null);
   assert.ok(!dispatched.some((d) => d.input.type === 'task_request_submitted'));
 });
 
-test('staff cannot edit a task that is not their own pending request', async () => {
+test('a developer-created task is approved with no requester', async () => {
   reset();
-  taskRow = baseTask({ request_status: 'approved', requested_by: 5 }); // approved -> locked
+  taskRow = baseTask();
+  await service.createTask({ projectId: '3', title: 'Direct task' }, dev, ctx);
+  const insert = calls.find((c) => /INSERT INTO tasks/.test(c.sql));
+  assert.equal(insert.params.requestStatus, 'approved');
+  assert.equal(insert.params.requestedBy, null);
+});
+
+test('staff cannot edit board tasks', async () => {
+  reset();
+  taskRow = baseTask({ requested_by: 5 });
   await assert.rejects(
     service.updateTask('7', { projectId: '3', title: 'x' }, staff, ctx),
     (err) => err.status === 403 && err.code === 'FORBIDDEN'
   );
 });
 
-test('staff can edit their own still-pending request', async () => {
+test('createTask records an on-behalf requestor by id (attribution only, still approved)', async () => {
   reset();
-  taskRow = baseTask({ request_status: 'pending', requested_by: 5 });
-  const result = await service.updateTask('7', { projectId: '3', title: 'x' }, staff, ctx);
-  assert.ok(result);
-  assert.ok(calls.some((c) => /UPDATE tasks/.test(c.sql)));
-});
-
-test('approveRequest flips a pending request to approved and notifies the requester', async () => {
-  reset();
-  taskRow = baseTask({ request_status: 'pending', requested_by: 5 });
-  await service.approveRequest('7', dev, ctx);
-  assert.ok(calls.some((c) => /UPDATE tasks SET request_status = 'approved'/.test(c.sql)));
-  assert.ok(dispatched.some((d) => d.input.type === 'task_request_approved' && String(d.input.userId) === '5'));
-});
-
-test('approveRequest refuses a task that is not pending', async () => {
-  reset();
-  taskRow = baseTask({ request_status: 'approved', requested_by: 5 });
-  await assert.rejects(
-    service.approveRequest('7', dev, ctx),
-    (err) => err.code === 'NOT_PENDING'
-  );
-});
-
-test('listTasks with requests=true scopes staff to their own via requested_by', async () => {
-  reset();
-  taskRow = baseTask({ request_status: 'pending', requested_by: 5 });
-  await service.listTasks({ requests: true }, staff);
-  const listCall = calls.find((c) => /FROM tasks t/.test(c.sql) && /requested_by IS NOT NULL/.test(c.sql));
-  assert.ok(listCall, 'filters to requests');
-  assert.match(listCall.sql, /t\.requested_by = :requesterId/);
-  assert.equal(listCall.params.requesterId, 5);
-});
-
-test('listTasks with requests=true does NOT self-scope for a developer', async () => {
-  reset();
-  taskRow = baseTask({ request_status: 'pending', requested_by: 5 });
-  await service.listTasks({ requests: true }, dev);
-  const listCall = calls.find((c) => /FROM tasks t/.test(c.sql) && /requested_by IS NOT NULL/.test(c.sql));
-  assert.doesNotMatch(listCall.sql, /requested_by = :requesterId/);
-});
-
-test('createTask on behalf of a requestor (by id) is a pending request owned by them', async () => {
-  reset();
-  taskRow = baseTask({ request_status: 'pending', requested_by: 9 });
-  // Actor is a developer, but the task is raised for requestor id 9.
+  taskRow = baseTask({ requested_by: 9 });
   await service.createTask({ projectId: '3', title: 'Fix form', requestedByUserId: 9 }, dev, ctx);
   const insert = calls.find((c) => /INSERT INTO tasks/.test(c.sql));
-  assert.equal(insert.params.requestStatus, 'pending');
+  assert.equal(insert.params.requestStatus, 'approved');
   assert.equal(insert.params.requestedBy, 9);
-  assert.ok(dispatched.some((d) => d.input.type === 'task_request_submitted'));
+  assert.ok(!dispatched.some((d) => d.input.type === 'task_request_submitted'));
 });
 
 test('createTask resolves a requestor by email/name to the owning user', async () => {
   reset();
   requestorRow = { id: 42 };
-  taskRow = baseTask({ request_status: 'pending', requested_by: 42 });
+  taskRow = baseTask({ requested_by: 42 });
   await service.createTask({ projectId: '3', title: 'Fix form', requestor: 'jane@x.co' }, dev, ctx);
   const insert = calls.find((c) => /INSERT INTO tasks/.test(c.sql));
   assert.equal(insert.params.requestedBy, 42);
@@ -154,16 +108,4 @@ test('createTask rejects an unknown requestor', async () => {
     service.createTask({ projectId: '3', title: 'Fix form', requestor: 'ghost@x.co' }, dev, ctx),
     (err) => err.code === 'REQUESTOR_UNKNOWN'
   );
-});
-
-test('createTask on behalf of a requestor WITH an assignee skips approval (goes to the board)', async () => {
-  reset();
-  taskRow = baseTask({ request_status: 'approved', requested_by: 9, assignee_name: 'Queenie' });
-  await service.createTask(
-    { projectId: '3', title: 'Fix form', requestedByUserId: 9, assigneeName: 'Queenie' }, dev, ctx
-  );
-  const insert = calls.find((c) => /INSERT INTO tasks/.test(c.sql));
-  assert.equal(insert.params.requestStatus, 'approved', 'assignee -> approved, no review');
-  assert.equal(insert.params.requestedBy, 9, 'still attributed to the requestor');
-  assert.ok(!dispatched.some((d) => d.input.type === 'task_request_submitted'), 'not a pending request');
 });

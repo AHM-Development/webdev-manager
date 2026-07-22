@@ -1,4 +1,8 @@
-import type { TaskChecklistItem, TaskPriority } from "@/components/tasks/data";
+import type {
+  TaskAttachment,
+  TaskChecklistItem,
+  TaskPriority,
+} from "@/components/tasks/data";
 import type {
   Issue,
   IssueStatus,
@@ -13,6 +17,7 @@ export type IssueOptions = {
   targetTypes: IssueTarget[];
   priorities?: TaskPriority[];
   projects: { id: string; name: string }[];
+  assignees: { id: string; name: string }[];
 };
 
 export async function listIssues(params?: {
@@ -39,6 +44,10 @@ export async function createIssue(payload: {
   description?: string;
   checklist?: TaskChecklistItem[];
   priority?: TaskPriority;
+  assigneeName?: string;
+  assigneeUserId?: string;
+  dueDate?: string;
+  attachments?: TaskAttachment[];
   scope?: "all" | "selected";
   projectIds?: string[];
 }) {
@@ -57,6 +66,10 @@ export async function updateIssue(
     checklist?: TaskChecklistItem[];
     priority?: TaskPriority;
     status?: IssueStatus;
+    assigneeName?: string;
+    assigneeUserId?: string;
+    dueDate?: string;
+    attachments?: TaskAttachment[];
   }
 ) {
   const { data } = await apiClient.patch<{ issue: Issue }>(

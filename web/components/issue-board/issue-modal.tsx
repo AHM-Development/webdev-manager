@@ -32,9 +32,16 @@ import {
   type IssueOptions,
 } from "@/libs/api/issues";
 import { notify } from "@/libs/notify";
-import type { TaskChecklistItem, TaskPriority } from "@/components/tasks/data";
+import type {
+  TaskAttachment,
+  TaskChecklistItem,
+  TaskPriority,
+} from "@/components/tasks/data";
 import { ChecklistTextArea } from "@/components/tasks/checklist-textarea";
+import { AttachmentCard } from "@/components/tasks/attachment-card";
+import { AttachmentUploader } from "@/components/tasks/attachment-uploader";
 import { makeChecklistItem } from "@/components/tasks/task-utils";
+import { SearchableFilter } from "@/components/ui/searchable-filter";
 
 import type { AppliedTarget, Issue } from "./data";
 import { issueFormSchema, type IssueFormValues } from "./schema";
@@ -176,7 +183,15 @@ export function IssueModal({
   const [checklist, setChecklist] = useState<TaskChecklistItem[]>(
     issue?.checklist ?? []
   );
+  const [attachments, setAttachments] = useState<TaskAttachment[]>(
+    issue?.attachments ?? []
+  );
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const assigneeOptions = [
+    { key: "Unassigned", label: "Unassigned" },
+    ...options.assignees.map((a) => ({ key: a.name, label: a.name })),
+  ];
+  const assigneeIdByName = new Map(options.assignees.map((a) => [a.name, a.id]));
   const [sourceText, setSourceText] = useState("");
   const [isOrganizing, setIsOrganizing] = useState(false);
   // Create runs as a two-step wizard (organize → details); edit opens straight
@@ -190,6 +205,9 @@ export function IssueModal({
       description: issue?.description ?? "",
       priority: issue?.priority ?? "Medium",
       status: issue?.status ?? "Open",
+      assignee: issue?.assignee ?? "Unassigned",
+      assigneeUserId: issue?.assigneeUserId ?? "",
+      dueDate: issue?.dueDate ?? "",
       scope: "all",
     },
   });
@@ -326,6 +344,10 @@ export function IssueModal({
           description: values.description.trim() || undefined,
           checklist: cleanChecklist,
           priority: values.priority,
+          assigneeName: values.assignee,
+          assigneeUserId: values.assigneeUserId || undefined,
+          dueDate: values.dueDate || undefined,
+          attachments,
           scope: values.scope,
           projectIds: values.scope === "selected" ? [...selected] : undefined,
         });
@@ -347,6 +369,10 @@ export function IssueModal({
         checklist: cleanChecklist,
         priority: values.priority,
         status: values.status,
+        assigneeName: values.assignee,
+        assigneeUserId: values.assigneeUserId || undefined,
+        dueDate: values.dueDate || undefined,
+        attachments,
       });
       onSaved(updated);
       notify.success("Issue updated");
@@ -525,6 +551,76 @@ export function IssueModal({
                         </div>
                       )}
                     />
+                  )}
+                </div>
+
+                {/* Assignee + Due date */}
+                <div className="flex flex-wrap gap-6">
+                  <Controller
+                    control={form.control}
+                    name="assignee"
+                    render={({ field }) => (
+                      <div className="space-y-1.5">
+                        <p className="text-sm font-medium">Assignee</p>
+                        <SearchableFilter
+                          ariaLabel="Assignee"
+                          value={field.value}
+                          options={assigneeOptions}
+                          onChange={(name) => {
+                            field.onChange(name);
+                            form.setValue(
+                              "assigneeUserId",
+                              assigneeIdByName.get(name) ?? ""
+                            );
+                          }}
+                          placeholder="Unassigned"
+                          triggerClassName="w-52"
+                        />
+                      </div>
+                    )}
+                  />
+
+                  <Controller
+                    control={form.control}
+                    name="dueDate"
+                    render={({ field }) => (
+                      <div className="space-y-1.5">
+                        <p className="text-sm font-medium">Due date</p>
+                        <input
+                          type="date"
+                          value={field.value}
+                          onChange={(event) => field.onChange(event.target.value)}
+                          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-[var(--brand)]"
+                        />
+                      </div>
+                    )}
+                  />
+                </div>
+
+                {/* Attachments */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-slate-700">Attachments</p>
+                    <AttachmentUploader
+                      onAdd={(attachment) =>
+                        setAttachments((current) => [...current, attachment])
+                      }
+                    />
+                  </div>
+                  {attachments.length > 0 && (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {attachments.map((attachment) => (
+                        <AttachmentCard
+                          key={attachment.id}
+                          attachment={attachment}
+                          onRemove={(item) =>
+                            setAttachments((current) =>
+                              current.filter((a) => a.id !== item.id)
+                            )
+                          }
+                        />
+                      ))}
+                    </div>
                   )}
                 </div>
 

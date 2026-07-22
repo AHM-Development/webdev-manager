@@ -667,6 +667,12 @@ async function ensureSchema() {
   // each application links to the real task it created on the board.
   await alterIgnoreDuplicate('ALTER TABLE issues ADD COLUMN checklist JSON NULL AFTER description');
   await alterIgnoreDuplicate("ALTER TABLE issues ADD COLUMN priority ENUM('Low', 'Medium', 'High') NOT NULL DEFAULT 'Medium' AFTER status");
+  // A default assignee, due date, and attachments carried onto every task the
+  // issue creates on a client board.
+  await alterIgnoreDuplicate('ALTER TABLE issues ADD COLUMN assignee_user_id BIGINT UNSIGNED NULL AFTER priority');
+  await alterIgnoreDuplicate('ALTER TABLE issues ADD COLUMN assignee_name VARCHAR(190) NULL AFTER assignee_user_id');
+  await alterIgnoreDuplicate('ALTER TABLE issues ADD COLUMN due_date DATE NULL AFTER assignee_name');
+  await alterIgnoreDuplicate('ALTER TABLE issues ADD COLUMN attachments JSON NULL AFTER due_date');
   await alterIgnoreDuplicate('ALTER TABLE issue_applications ADD COLUMN task_id BIGINT UNSIGNED NULL AFTER project_id');
   await alterIgnoreDuplicate('ALTER TABLE issue_applications ADD KEY issue_applications_task_idx (task_id)');
 

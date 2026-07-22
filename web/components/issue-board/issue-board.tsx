@@ -34,6 +34,7 @@ const emptyOptions: IssueOptions = {
   targetTypes: ["task", "checklist"],
   priorities: ["Low", "Medium", "High"],
   projects: [],
+  assignees: [],
 };
 
 const priorityColor: Record<TaskPriority, "danger" | "warning" | "default"> = {

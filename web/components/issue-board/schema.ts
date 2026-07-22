@@ -11,6 +11,9 @@ export const issueFormSchema = z.object({
   description: z.string(),
   priority: issuePrioritySchema,
   status: issueStatusSchema,
+  assignee: z.string(),
+  assigneeUserId: z.string(),
+  dueDate: z.string(),
   scope: z.enum(["all", "selected"]),
 });
 

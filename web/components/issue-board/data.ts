@@ -1,4 +1,5 @@
 import type {
+  TaskAttachment,
   TaskChecklistItem,
   TaskPriority,
   TaskStatus,
@@ -29,6 +30,10 @@ export type Issue = {
   checklist?: TaskChecklistItem[];
   priority: TaskPriority;
   status: IssueStatus;
+  assignee?: string;
+  assigneeUserId?: string;
+  dueDate?: string;
+  attachments?: TaskAttachment[];
   applied: AppliedTarget[];
   createdAt?: string;
   updatedAt?: string;

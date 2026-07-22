@@ -50,6 +50,29 @@ function safePriority(value, fallback) {
   return PRIORITIES.indexOf(value) === -1 ? fallback : value;
 }
 
+function normalizeDate(value) {
+  var raw = cleanString(value);
+  if (!raw) return null;
+  var parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function normalizeAttachments(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map(function(item, index) {
+      var type = item && item.type === 'file' ? 'file' : item && item.type === 'source' ? 'source' : 'link';
+      return {
+        id: cleanString(item && item.id) || 'attachment-' + Date.now() + '-' + index,
+        name: cleanString(item && item.name),
+        type: type,
+        url: cleanString(item && item.url) || undefined,
+      };
+    })
+    .filter(function(item) { return item.name; });
+}
+
 function normalizeChecklist(items) {
   if (!Array.isArray(items)) return [];
   return items
@@ -92,6 +115,10 @@ function issueSummaryFromRows(rows) {
     checklist: normalizeChecklist(parseJson(base.checklist, [])),
     priority: base.priority || 'Medium',
     status: base.status,
+    assignee: base.assignee_name || 'Unassigned',
+    assigneeUserId: base.assignee_user_id ? String(base.assignee_user_id) : undefined,
+    dueDate: base.due_date ? new Date(base.due_date).toISOString().slice(0, 10) : undefined,
+    attachments: normalizeAttachments(parseJson(base.attachments, [])),
     createdAt: base.created_at,
     updatedAt: base.updated_at,
     applied: rows
@@ -197,6 +224,18 @@ function normalizeIssuePayload(input, partial) {
   if (!partial || input.priority != null) {
     payload.priority = safePriority(input.priority, partial ? undefined : 'Medium');
   }
+  if (!partial || input.assigneeName != null || input.assigneeUserId != null) {
+    var name = cleanString(input.assigneeName);
+    var hasAssignee = name && name !== 'Unassigned';
+    payload.assigneeName = hasAssignee ? name : 'Unassigned';
+    payload.assigneeUserId = hasAssignee && input.assigneeUserId ? String(input.assigneeUserId) : null;
+  }
+  if (!partial || input.dueDate !== undefined) {
+    payload.dueDate = normalizeDate(input.dueDate);
+  }
+  if (!partial || input.attachments != null) {
+    payload.attachments = normalizeAttachments(input.attachments);
+  }
   return payload;
 }
 
@@ -232,17 +271,20 @@ async function createTaskForIssue(issue, projectId, user) {
   var result = await db.query(
     `INSERT INTO tasks
       (project_id, title, description, checklist, attachments, status, priority,
-       assignee_user_id, assignee_name, sort_order, created_by, updated_by)
+       assignee_user_id, assignee_name, due_date, sort_order, created_by, updated_by)
      VALUES
       (:projectId, :title, :description, :checklist, :attachments, 'Backlog', :priority,
-       NULL, 'Unassigned', :sortOrder, :userId, :userId)`,
+       :assigneeUserId, :assigneeName, :dueDate, :sortOrder, :userId, :userId)`,
     {
       projectId: projectId,
       title: issue.title,
       description: issue.description || null,
       checklist: JSON.stringify(issue.checklist || []),
-      attachments: JSON.stringify([]),
+      attachments: JSON.stringify(issue.attachments || []),
       priority: issue.priority || 'Medium',
+      assigneeUserId: issue.assigneeUserId || null,
+      assigneeName: issue.assignee && issue.assignee !== 'Unassigned' ? issue.assignee : 'Unassigned',
+      dueDate: issue.dueDate || null,
       sortOrder: sortOrder,
       userId: user.id,
     }
@@ -253,14 +295,22 @@ async function createTaskForIssue(issue, projectId, user) {
 async function createIssue(input, user, context) {
   var payload = normalizeIssuePayload(input || {}, false);
   var result = await db.query(
-    `INSERT INTO issues (title, description, checklist, status, priority, created_by, updated_by)
-     VALUES (:title, :description, :checklist, :status, :priority, :userId, :userId)`,
+    `INSERT INTO issues
+      (title, description, checklist, status, priority, assignee_user_id, assignee_name,
+       due_date, attachments, created_by, updated_by)
+     VALUES
+      (:title, :description, :checklist, :status, :priority, :assigneeUserId, :assigneeName,
+       :dueDate, :attachments, :userId, :userId)`,
     {
       title: payload.title,
       description: payload.description,
       checklist: JSON.stringify(payload.checklist || []),
       status: payload.status,
       priority: payload.priority,
+      assigneeUserId: payload.assigneeUserId || null,
+      assigneeName: payload.assigneeName && payload.assigneeName !== 'Unassigned' ? payload.assigneeName : null,
+      dueDate: payload.dueDate || null,
+      attachments: JSON.stringify(payload.attachments || []),
       userId: user.id,
     }
   );
@@ -318,6 +368,15 @@ async function propagateToTasks(issueId, payload, user) {
       sets.push('checklist = :checklist');
       params.checklist = JSON.stringify(merged);
     }
+    if (payload.assigneeName != null) {
+      sets.push('assignee_user_id = :assigneeUserId', 'assignee_name = :assigneeName');
+      params.assigneeUserId = payload.assigneeUserId || null;
+      params.assigneeName = payload.assigneeName;
+    }
+    if (payload.dueDate !== undefined) {
+      sets.push('due_date = :dueDate');
+      params.dueDate = payload.dueDate || null;
+    }
 
     if (!sets.length) continue;
     sets.push('updated_by = :userId');
@@ -353,6 +412,19 @@ async function updateIssue(issueId, input, user, context) {
   if (payload.priority != null) {
     sets.push('priority = :priority');
     params.priority = payload.priority;
+  }
+  if (payload.assigneeName != null) {
+    sets.push('assignee_user_id = :assigneeUserId', 'assignee_name = :assigneeName');
+    params.assigneeUserId = payload.assigneeUserId || null;
+    params.assigneeName = payload.assigneeName && payload.assigneeName !== 'Unassigned' ? payload.assigneeName : null;
+  }
+  if (payload.dueDate !== undefined) {
+    sets.push('due_date = :dueDate');
+    params.dueDate = payload.dueDate || null;
+  }
+  if (payload.attachments != null) {
+    sets.push('attachments = :attachments');
+    params.attachments = JSON.stringify(payload.attachments);
   }
 
   if (sets.length) {
@@ -575,12 +647,21 @@ async function getOptions() {
      WHERE deleted_at IS NULL
      ORDER BY client_name ASC`
   );
+  var assignees = await db.query(
+    `SELECT id, name, email FROM users
+     WHERE deleted_at IS NULL AND status = 'active'
+       AND role IN ('superadmin', 'developer', 'staff')
+     ORDER BY name ASC, email ASC`
+  );
   return {
     statuses: ISSUE_STATUSES,
     targetTypes: TARGET_TYPES,
     priorities: PRIORITIES,
     projects: projects.map(function(project) {
       return { id: String(project.id), name: project.client_name };
+    }),
+    assignees: assignees.map(function(row) {
+      return { id: String(row.id), name: row.name || row.email };
     }),
   };
 }

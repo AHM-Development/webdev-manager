@@ -386,8 +386,8 @@ export function IssueModal({
   return (
     <Modal isOpen={state.isOpen} onOpenChange={state.setOpen}>
       <ModalBackdrop>
-        <ModalContainer placement="center" size="lg">
-          <ModalDialog>
+        <ModalContainer placement="center">
+          <ModalDialog className="max-w-3xl">
             <form onSubmit={submit}>
               <ModalHeader>
                 <ModalHeading className="text-base font-semibold">
@@ -395,7 +395,7 @@ export function IssueModal({
                 </ModalHeading>
               </ModalHeader>
 
-              <ModalBody className="max-h-[72vh] space-y-4 overflow-y-auto">
+              <ModalBody className="max-h-[72vh] space-y-5 overflow-y-auto">
                 {!organized ? (
                   <div className="space-y-2">
                     <p className="text-sm font-medium">Organize with AI</p>

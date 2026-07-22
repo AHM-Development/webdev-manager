@@ -32,6 +32,7 @@ export type Issue = {
   status: IssueStatus;
   assignee?: string;
   assigneeUserId?: string;
+  startDate?: string;
   dueDate?: string;
   attachments?: TaskAttachment[];
   applied: AppliedTarget[];

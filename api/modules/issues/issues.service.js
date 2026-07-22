@@ -117,6 +117,7 @@ function issueSummaryFromRows(rows) {
     status: base.status,
     assignee: base.assignee_name || 'Unassigned',
     assigneeUserId: base.assignee_user_id ? String(base.assignee_user_id) : undefined,
+    startDate: base.start_date ? new Date(base.start_date).toISOString().slice(0, 10) : undefined,
     dueDate: base.due_date ? new Date(base.due_date).toISOString().slice(0, 10) : undefined,
     attachments: normalizeAttachments(parseJson(base.attachments, [])),
     createdAt: base.created_at,
@@ -230,6 +231,9 @@ function normalizeIssuePayload(input, partial) {
     payload.assigneeName = hasAssignee ? name : 'Unassigned';
     payload.assigneeUserId = hasAssignee && input.assigneeUserId ? String(input.assigneeUserId) : null;
   }
+  if (!partial || input.startDate !== undefined) {
+    payload.startDate = normalizeDate(input.startDate);
+  }
   if (!partial || input.dueDate !== undefined) {
     payload.dueDate = normalizeDate(input.dueDate);
   }
@@ -271,10 +275,10 @@ async function createTaskForIssue(issue, projectId, user) {
   var result = await db.query(
     `INSERT INTO tasks
       (project_id, title, description, checklist, attachments, status, priority,
-       assignee_user_id, assignee_name, due_date, sort_order, created_by, updated_by)
+       assignee_user_id, assignee_name, start_date, due_date, sort_order, created_by, updated_by)
      VALUES
       (:projectId, :title, :description, :checklist, :attachments, 'Backlog', :priority,
-       :assigneeUserId, :assigneeName, :dueDate, :sortOrder, :userId, :userId)`,
+       :assigneeUserId, :assigneeName, :startDate, :dueDate, :sortOrder, :userId, :userId)`,
     {
       projectId: projectId,
       title: issue.title,
@@ -284,6 +288,7 @@ async function createTaskForIssue(issue, projectId, user) {
       priority: issue.priority || 'Medium',
       assigneeUserId: issue.assigneeUserId || null,
       assigneeName: issue.assignee && issue.assignee !== 'Unassigned' ? issue.assignee : 'Unassigned',
+      startDate: issue.startDate || null,
       dueDate: issue.dueDate || null,
       sortOrder: sortOrder,
       userId: user.id,
@@ -297,10 +302,10 @@ async function createIssue(input, user, context) {
   var result = await db.query(
     `INSERT INTO issues
       (title, description, checklist, status, priority, assignee_user_id, assignee_name,
-       due_date, attachments, created_by, updated_by)
+       start_date, due_date, attachments, created_by, updated_by)
      VALUES
       (:title, :description, :checklist, :status, :priority, :assigneeUserId, :assigneeName,
-       :dueDate, :attachments, :userId, :userId)`,
+       :startDate, :dueDate, :attachments, :userId, :userId)`,
     {
       title: payload.title,
       description: payload.description,
@@ -309,6 +314,7 @@ async function createIssue(input, user, context) {
       priority: payload.priority,
       assigneeUserId: payload.assigneeUserId || null,
       assigneeName: payload.assigneeName && payload.assigneeName !== 'Unassigned' ? payload.assigneeName : null,
+      startDate: payload.startDate || null,
       dueDate: payload.dueDate || null,
       attachments: JSON.stringify(payload.attachments || []),
       userId: user.id,
@@ -373,6 +379,10 @@ async function propagateToTasks(issueId, payload, user) {
       params.assigneeUserId = payload.assigneeUserId || null;
       params.assigneeName = payload.assigneeName;
     }
+    if (payload.startDate !== undefined) {
+      sets.push('start_date = :startDate');
+      params.startDate = payload.startDate || null;
+    }
     if (payload.dueDate !== undefined) {
       sets.push('due_date = :dueDate');
       params.dueDate = payload.dueDate || null;
@@ -417,6 +427,10 @@ async function updateIssue(issueId, input, user, context) {
     sets.push('assignee_user_id = :assigneeUserId', 'assignee_name = :assigneeName');
     params.assigneeUserId = payload.assigneeUserId || null;
     params.assigneeName = payload.assigneeName && payload.assigneeName !== 'Unassigned' ? payload.assigneeName : null;
+  }
+  if (payload.startDate !== undefined) {
+    sets.push('start_date = :startDate');
+    params.startDate = payload.startDate || null;
   }
   if (payload.dueDate !== undefined) {
     sets.push('due_date = :dueDate');

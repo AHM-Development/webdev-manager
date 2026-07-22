@@ -127,21 +127,23 @@ function toDateRangeValue(
   return start && end ? { start, end } : null;
 }
 
-function TaskDateRangeField({
+export function TaskDateRangeField({
   startDate,
   dueDate,
   onChange,
   error,
+  label = "Date Range",
 }: {
   startDate: string;
   dueDate: string;
   onChange: (value: RangeValue<DateValue> | null) => void;
   error?: string;
+  label?: string;
 }) {
   return (
     <div>
       <label className="mb-1 block text-sm font-medium text-slate-700">
-        Date Range
+        {label}
       </label>
       <DateRangePicker
         aria-label="Task date range"
@@ -197,7 +199,7 @@ function TaskDateRangeField({
   );
 }
 
-function HeroAutocompleteField({
+export function HeroAutocompleteField({
   label,
   value,
   onChange,

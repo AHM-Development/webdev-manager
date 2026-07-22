@@ -46,6 +46,7 @@ export async function createIssue(payload: {
   priority?: TaskPriority;
   assigneeName?: string;
   assigneeUserId?: string;
+  startDate?: string;
   dueDate?: string;
   attachments?: TaskAttachment[];
   scope?: "all" | "selected";
@@ -68,6 +69,7 @@ export async function updateIssue(
     status?: IssueStatus;
     assigneeName?: string;
     assigneeUserId?: string;
+    startDate?: string;
     dueDate?: string;
     attachments?: TaskAttachment[];
   }

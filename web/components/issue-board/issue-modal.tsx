@@ -40,46 +40,16 @@ import type {
 import { ChecklistTextArea } from "@/components/tasks/checklist-textarea";
 import { AttachmentCard } from "@/components/tasks/attachment-card";
 import { AttachmentUploader } from "@/components/tasks/attachment-uploader";
+import {
+  HeroAutocompleteField,
+  TaskDateRangeField,
+} from "@/components/tasks/create-task-modal";
 import { makeChecklistItem } from "@/components/tasks/task-utils";
-import { SearchableFilter } from "@/components/ui/searchable-filter";
 
 import type { AppliedTarget, Issue } from "./data";
 import { issueFormSchema, type IssueFormValues } from "./schema";
 
 const PRIORITIES: TaskPriority[] = ["Low", "Medium", "High"];
-
-/** Themed segmented control — active uses the brand color, not gray-900. */
-function Segmented<T extends string>({
-  value,
-  options,
-  onChange,
-}: {
-  value: T;
-  options: { id: T; label: string }[];
-  onChange: (value: T) => void;
-}) {
-  return (
-    <div className="inline-flex rounded-md border border-slate-200 p-0.5 text-sm">
-      {options.map((option) => {
-        const isActive = value === option.id;
-        return (
-          <button
-            key={option.id}
-            type="button"
-            onClick={() => onChange(option.id)}
-            className={`rounded px-3 py-1 font-medium transition-colors ${
-              isActive
-                ? "bg-[var(--brand)] text-white"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 /** Scope picker (All clients / Selected clients) + searchable client list. */
 function ClientScopePicker({
@@ -103,9 +73,10 @@ function ClientScopePicker({
 
   return (
     <div className="space-y-2">
-      <Segmented
+      <HeroAutocompleteField
+        label="Apply to"
         value={scope}
-        onChange={onScopeChange}
+        onChange={(value) => onScopeChange(value === "selected" ? "selected" : "all")}
         options={[
           { id: "all", label: "All clients" },
           { id: "selected", label: "Selected clients" },
@@ -188,8 +159,8 @@ export function IssueModal({
   );
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const assigneeOptions = [
-    { key: "Unassigned", label: "Unassigned" },
-    ...options.assignees.map((a) => ({ key: a.name, label: a.name })),
+    { id: "Unassigned", label: "Unassigned" },
+    ...options.assignees.map((a) => ({ id: a.name, label: a.name })),
   ];
   const assigneeIdByName = new Map(options.assignees.map((a) => [a.name, a.id]));
   const [sourceText, setSourceText] = useState("");
@@ -207,6 +178,7 @@ export function IssueModal({
       status: issue?.status ?? "Open",
       assignee: issue?.assignee ?? "Unassigned",
       assigneeUserId: issue?.assigneeUserId ?? "",
+      startDate: issue?.startDate ?? "",
       dueDate: issue?.dueDate ?? "",
       scope: "all",
     },
@@ -346,6 +318,7 @@ export function IssueModal({
           priority: values.priority,
           assigneeName: values.assignee,
           assigneeUserId: values.assigneeUserId || undefined,
+          startDate: values.startDate || undefined,
           dueDate: values.dueDate || undefined,
           attachments,
           scope: values.scope,
@@ -371,6 +344,7 @@ export function IssueModal({
         status: values.status,
         assigneeName: values.assignee,
         assigneeUserId: values.assigneeUserId || undefined,
+        startDate: values.startDate || undefined,
         dueDate: values.dueDate || undefined,
         attachments,
       });
@@ -513,121 +487,80 @@ export function IssueModal({
                   </Button>
                 </div>
 
-                {/* Priority + Status */}
-                <div className="flex flex-wrap gap-6">
+                {/* Assignee — full width */}
+                <Controller
+                  control={form.control}
+                  name="assignee"
+                  render={({ field }) => (
+                    <HeroAutocompleteField
+                      label="Assignee"
+                      value={field.value}
+                      onChange={(name) => {
+                        const next = name || "Unassigned";
+                        field.onChange(next);
+                        form.setValue(
+                          "assigneeUserId",
+                          assigneeIdByName.get(next) ?? ""
+                        );
+                      }}
+                      options={assigneeOptions}
+                    />
+                  )}
+                />
+
+                {/* Priority + Status — half each */}
+                <div className="grid gap-4 md:grid-cols-2">
                   <Controller
                     control={form.control}
                     name="priority"
                     render={({ field }) => (
-                      <div className="space-y-1.5">
-                        <p className="text-sm font-medium">Priority</p>
-                        <Segmented<TaskPriority>
-                          value={field.value}
-                          onChange={field.onChange}
-                          options={PRIORITIES.map((item) => ({
-                            id: item,
-                            label: item,
-                          }))}
-                        />
-                      </div>
+                      <HeroAutocompleteField
+                        label="Priority"
+                        value={field.value}
+                        onChange={field.onChange}
+                        options={PRIORITIES.map((item) => ({ id: item, label: item }))}
+                      />
                     )}
                   />
-
-                  {isEdit && (
-                    <Controller
-                      control={form.control}
-                      name="status"
-                      render={({ field }) => (
-                        <div className="space-y-1.5">
-                          <p className="text-sm font-medium">Status</p>
-                          <Segmented
-                            value={field.value}
-                            onChange={field.onChange}
-                            options={options.statuses.map((item) => ({
-                              id: item,
-                              label: item,
-                            }))}
-                          />
-                        </div>
-                      )}
-                    />
-                  )}
-                </div>
-
-                {/* Assignee + Due date */}
-                <div className="flex flex-wrap gap-6">
                   <Controller
                     control={form.control}
-                    name="assignee"
+                    name="status"
                     render={({ field }) => (
-                      <div className="space-y-1.5">
-                        <p className="text-sm font-medium">Assignee</p>
-                        <SearchableFilter
-                          ariaLabel="Assignee"
-                          value={field.value}
-                          options={assigneeOptions}
-                          onChange={(name) => {
-                            field.onChange(name);
-                            form.setValue(
-                              "assigneeUserId",
-                              assigneeIdByName.get(name) ?? ""
-                            );
-                          }}
-                          placeholder="Unassigned"
-                          triggerClassName="w-52"
-                        />
-                      </div>
-                    )}
-                  />
-
-                  <Controller
-                    control={form.control}
-                    name="dueDate"
-                    render={({ field }) => (
-                      <div className="space-y-1.5">
-                        <p className="text-sm font-medium">Due date</p>
-                        <input
-                          type="date"
-                          value={field.value}
-                          onChange={(event) => field.onChange(event.target.value)}
-                          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-[var(--brand)]"
-                        />
-                      </div>
+                      <HeroAutocompleteField
+                        label="Status"
+                        value={field.value}
+                        onChange={field.onChange}
+                        options={options.statuses.map((item) => ({ id: item, label: item }))}
+                      />
                     )}
                   />
                 </div>
 
-                {/* Attachments */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-slate-700">Attachments</p>
-                    <AttachmentUploader
-                      onAdd={(attachment) =>
-                        setAttachments((current) => [...current, attachment])
-                      }
-                    />
-                  </div>
-                  {attachments.length > 0 && (
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      {attachments.map((attachment) => (
-                        <AttachmentCard
-                          key={attachment.id}
-                          attachment={attachment}
-                          onRemove={(item) =>
-                            setAttachments((current) =>
-                              current.filter((a) => a.id !== item.id)
-                            )
-                          }
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
+                {/* Start + Due date range */}
+                <TaskDateRangeField
+                  startDate={form.watch("startDate")}
+                  dueDate={form.watch("dueDate")}
+                  onChange={(value) => {
+                    form.setValue(
+                      "startDate",
+                      value?.start ? value.start.toString() : "",
+                      { shouldValidate: true }
+                    );
+                    form.setValue(
+                      "dueDate",
+                      value?.end ? value.end.toString() : "",
+                      { shouldValidate: true }
+                    );
+                  }}
+                  error={
+                    form.formState.errors.startDate?.message ??
+                    form.formState.errors.dueDate?.message
+                  }
+                />
 
                 {/* Create: choose where to apply. Edit: list + apply more. */}
                 {!isEdit ? (
                   <div className="space-y-1.5">
-                    <p className="text-sm font-medium">Apply to</p>
                     <Controller
                       control={form.control}
                       name="scope"
@@ -726,6 +659,33 @@ export function IssueModal({
                     </div>
                   </>
                 )}
+
+                {/* Attachments — full width */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-slate-700">Attachments</p>
+                    <AttachmentUploader
+                      onAdd={(attachment) =>
+                        setAttachments((current) => [...current, attachment])
+                      }
+                    />
+                  </div>
+                  {attachments.length > 0 && (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {attachments.map((attachment) => (
+                        <AttachmentCard
+                          key={attachment.id}
+                          attachment={attachment}
+                          onRemove={(item) =>
+                            setAttachments((current) =>
+                              current.filter((a) => a.id !== item.id)
+                            )
+                          }
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
                   </>
                 )}
               </ModalBody>

@@ -2,6 +2,7 @@
 
 import {
   Button,
+  Input,
   Table,
   TableBody,
   TableCell,
@@ -10,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@heroui/react";
-import { ArrowUpRight, ChevronDown, Flag, Plus, Star } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Flag, Plus, Search, Star } from "lucide-react";
 import { useState } from "react";
 
 import type { Project } from "@/components/projects/data";
@@ -61,14 +62,22 @@ export function TaskSummary({
   readOnly?: boolean;
 }) {
   const [statusFilter, setStatusFilter] = useState<string>("In Progress");
+  const [query, setQuery] = useState("");
   const [openProjects, setOpenProjects] = useState<Set<string>>(
     () => new Set()
   );
 
-  const visible =
-    statusFilter === "all"
-      ? tasks
-      : tasks.filter((t) => t.status === statusFilter);
+  const q = query.trim().toLowerCase();
+  const clientNameOf = (id: string) =>
+    projects.find((p) => p.id === id)?.clientName ?? "";
+  const visible = tasks.filter((t) => {
+    if (statusFilter !== "all" && t.status !== statusFilter) return false;
+    if (!q) return true;
+    return [t.title, t.assignee, clientNameOf(t.projectId)]
+      .join(" ")
+      .toLowerCase()
+      .includes(q);
+  });
 
   const assigneeOrder = [
     ...ASSIGNEE_COLUMNS,
@@ -103,12 +112,22 @@ export function TaskSummary({
         <h2 className="text-lg font-semibold text-gray-900">
           {statusFilter === "all" ? "All tasks" : statusFilter} — by Assignee
         </h2>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {onAddTask && (
             <Button variant="primary" onPress={onAddTask}>
               <Plus className="h-4 w-4" /> {addTaskLabel}
             </Button>
           )}
+          <div className="relative w-56">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              aria-label="Search tasks"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search task, client, assignee…"
+              className="w-full pl-9"
+            />
+          </div>
           <SearchableFilter
             ariaLabel="Filter by status"
             value={statusFilter}

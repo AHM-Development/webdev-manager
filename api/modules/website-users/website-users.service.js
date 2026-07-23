@@ -19,6 +19,13 @@ function notFound() {
   return err;
 }
 
+// Non-super-admins may only touch credentials assigned to them. Throw 404
+// (not 403) so a credential they can't see doesn't leak its existence.
+function assertCanAccess(credential, user) {
+  if (!user || user.role === 'superadmin') return;
+  if (String(credential.userId || '') !== String(user.id)) throw notFound();
+}
+
 function normalizeEnvironment(value) {
   var normalized = String(value || '').trim().toLowerCase();
   return normalized === 'staging' ? 'Staging' : 'Live';
@@ -85,9 +92,15 @@ async function queryCredentials(where, params, includePassword) {
   });
 }
 
-async function listCredentials(filters) {
+async function listCredentials(filters, user) {
   var where = ['wc.deleted_at IS NULL'];
   var params = {};
+
+  // Non-super-admins only see credentials assigned to them (linked user_id).
+  if (user && user.role !== 'superadmin') {
+    where.push('wc.user_id = :meId');
+    params.meId = user.id;
+  }
 
   if (filters.q) {
     where.push(
@@ -254,6 +267,7 @@ async function createCredential(input, user, context) {
 
 async function updateCredential(credentialId, input, user, context) {
   var existing = await getCredential(credentialId, true);
+  assertCanAccess(existing, user);
   var payload = await normalizePayload(input, existing);
   var nextPassword = payload.password || existing.password;
   var passwordUpdatedAt =
@@ -309,12 +323,14 @@ async function deleteCredential(credentialId, user, context) {
 
 async function revealCredential(credentialId, user, context) {
   var credential = await getCredential(credentialId, true);
+  assertCanAccess(credential, user);
   await logCredentialActivity(user, context, 'website_credentials.password_revealed', credential);
   return { password: credential.password };
 }
 
 async function copyPackage(credentialId, user, context) {
   var credential = await getCredential(credentialId, true);
+  assertCanAccess(credential, user);
   var siteUrl = credential.externalSite || credential.websiteUrl || '';
   var content = [siteUrl, credential.username, credential.password].join('\n');
   await logCredentialActivity(user, context, 'website_credentials.copied', credential);

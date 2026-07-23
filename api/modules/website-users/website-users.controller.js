@@ -9,7 +9,7 @@ function context(req) {
 
 async function list(req, res, next) {
   try {
-    res.json({ credentials: await service.listCredentials(req.query || {}) });
+    res.json({ credentials: await service.listCredentials(req.query || {}, req.user) });
   } catch (err) {
     next(err);
   }

@@ -118,6 +118,7 @@ function StatusColumn({
   column,
   tasks,
   getClientName,
+  getPriorityClient,
   onMove,
   onChangeStatus,
   onOpenTask,
@@ -125,6 +126,7 @@ function StatusColumn({
   column: BoardColumn;
   tasks: Task[];
   getClientName?: (task: Task) => string | undefined;
+  getPriorityClient?: (task: Task) => boolean;
   onMove: (
     ids: string[],
     toStatus: TaskStatus,
@@ -206,20 +208,26 @@ function StatusColumn({
         )}
         className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2 outline-none"
       >
-        {(item) => (
+        {(item) => {
+          const isPriority = getPriorityClient?.(item) ?? false;
+          return (
           <GridListItem
             id={item.id}
             textValue={item.title}
-            className="kanban-card cursor-grab p-3 outline-none transition-transform hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#0b7de3] data-[dragging=true]:opacity-50"
+            className={`kanban-card cursor-grab p-3 outline-none transition-transform hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#0b7de3] data-[dragging=true]:opacity-50 ${
+              isPriority ? "border-l-2 border-l-amber-400" : ""
+            }`}
           >
             <TaskKanbanCard
               task={item}
               clientName={getClientName?.(item)}
+              priorityClient={isPriority}
               onChangeStatus={onChangeStatus}
               onOpenTask={onOpenTask}
             />
           </GridListItem>
-        )}
+          );
+        }}
       </GridList>
     </div>
   );
@@ -260,6 +268,14 @@ export function MyTasksBoard() {
 
   const clientNameById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.clientName])),
+    [projects]
+  );
+
+  const priorityClientIds = useMemo(
+    () =>
+      new Set(
+        projects.filter((project) => project.priority === "High").map((p) => p.id)
+      ),
     [projects]
   );
 
@@ -425,6 +441,7 @@ export function MyTasksBoard() {
                 column.includes.includes(task.status)
               )}
               getClientName={(task) => clientNameById.get(task.projectId)}
+              getPriorityClient={(task) => priorityClientIds.has(task.projectId)}
               onMove={handleMove}
               onChangeStatus={handleChangeStatus}
               onOpenTask={openTask}

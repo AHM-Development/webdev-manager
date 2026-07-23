@@ -141,6 +141,12 @@ export function TasksView() {
     [projects]
   );
 
+  // Priority clients = High-priority projects.
+  const priorityClientIds = useMemo(
+    () => new Set(projects.filter((p) => p.priority === "High").map((p) => p.id)),
+    [projects]
+  );
+
   const projectTasks = useMemo(
     () => (project ? tasks.filter((t) => t.projectId === project.id) : []),
     [tasks, project]
@@ -393,6 +399,12 @@ export function TasksView() {
               getClientName={
                 isAllClients
                   ? (task) => clientNameById.get(task.projectId)
+                  : undefined
+              }
+              priorityClient={!isAllClients && project?.priority === "High"}
+              getPriorityClient={
+                isAllClients
+                  ? (task) => priorityClientIds.has(task.projectId)
                   : undefined
               }
               tasks={isAllClients ? tasks : projectTasks}

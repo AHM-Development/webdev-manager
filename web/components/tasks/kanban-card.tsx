@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import { Flag } from "lucide-react";
+import { Flag, Star } from "lucide-react";
 
 import { StatusSelect } from "./status-select";
 import { checklistProgress } from "./task-utils";
@@ -16,12 +16,14 @@ const priorityIconClass: Record<TaskPriority, string> = {
 export function TaskKanbanCard({
   task,
   clientName,
+  priorityClient = false,
   onChangeStatus,
   onOpenTask,
   showStatusControl = true,
 }: {
   task: Task;
   clientName?: string;
+  priorityClient?: boolean;
   onChangeStatus?: (taskId: string, status: TaskStatus) => void;
   onOpenTask: (task: Task) => void;
   showStatusControl?: boolean;
@@ -31,8 +33,14 @@ export function TaskKanbanCard({
     <div className="space-y-2">
       <div className="space-y-0.5">
         {clientName && (
-          <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            {clientName}
+          <p className="flex items-center gap-1 truncate text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            {priorityClient && (
+              <Star
+                className="h-3 w-3 shrink-0 fill-amber-500 text-amber-500"
+                aria-label="Priority client"
+              />
+            )}
+            <span className="truncate">{clientName}</span>
           </p>
         )}
         <p className="text-sm font-medium text-gray-900">{task.title}</p>

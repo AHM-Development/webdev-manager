@@ -39,6 +39,8 @@ export function KanbanColumn({
   assignee,
   clientName,
   getClientName,
+  priorityClient,
+  getPriorityClient,
   tasks,
   onMove,
   onChangeStatus,
@@ -47,6 +49,8 @@ export function KanbanColumn({
   assignee: string;
   clientName?: string;
   getClientName?: (task: Task) => string | undefined;
+  priorityClient?: boolean;
+  getPriorityClient?: (task: Task) => boolean;
   tasks: Task[];
   onMove: MoveHandler;
   onChangeStatus: (taskId: string, status: TaskStatus) => void;
@@ -157,20 +161,28 @@ export function KanbanColumn({
         )}
         className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2 outline-none"
       >
-        {(item) => (
+        {(item) => {
+          const isPriority = getPriorityClient
+            ? getPriorityClient(item)
+            : !!priorityClient;
+          return (
           <GridListItem
             id={item.id}
             textValue={item.title}
-            className="kanban-card cursor-grab p-3 outline-none transition-transform hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#0b7de3] data-[dragging=true]:opacity-50"
+            className={`kanban-card cursor-grab p-3 outline-none transition-transform hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#0b7de3] data-[dragging=true]:opacity-50 ${
+              isPriority ? "border-l-2 border-l-amber-400" : ""
+            }`}
           >
             <TaskKanbanCard
               task={item}
               clientName={getClientName ? getClientName(item) : clientName}
+              priorityClient={isPriority}
               onChangeStatus={onChangeStatus}
               onOpenTask={onOpenTask}
             />
           </GridListItem>
-        )}
+          );
+        }}
       </GridList>
     </div>
   );

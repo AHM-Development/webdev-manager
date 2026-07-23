@@ -30,6 +30,7 @@ import {
   Eye,
   Plus,
   Search,
+  Star,
   Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -287,8 +288,14 @@ function PriorityProjectTable({
                 className="cursor-grab data-[dragging=true]:opacity-50"
               >
                 <TableCell>
-                  <span className="font-medium text-gray-900">
-                    {project.clientName}
+                  <span className="flex items-center gap-1.5 font-medium text-gray-900">
+                    {project.priority === "High" && (
+                      <Star
+                        className="h-3.5 w-3.5 shrink-0 fill-amber-500 text-amber-500"
+                        aria-label="Priority client"
+                      />
+                    )}
+                    <span className="truncate">{project.clientName}</span>
                   </span>
                 </TableCell>
                 <TableCell>

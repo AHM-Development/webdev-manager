@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@heroui/react";
-import { ArrowUpRight, ChevronDown, Flag, Plus } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Flag, Plus, Star } from "lucide-react";
 import { useState } from "react";
 
 import type { Project } from "@/components/projects/data";
@@ -143,7 +143,13 @@ export function TaskSummary({
                 (task) => task.projectId === project.id
               ),
             }))
-            .filter((projectGroup) => projectGroup.rows.length > 0);
+            .filter((projectGroup) => projectGroup.rows.length > 0)
+            // Priority clients (High-priority projects) float to the top.
+            .sort(
+              (a, b) =>
+                (b.project.priority === "High" ? 1 : 0) -
+                (a.project.priority === "High" ? 1 : 0)
+            );
 
           return (
             <section key={group.assignee} className="space-y-3">
@@ -208,11 +214,21 @@ export function TaskSummary({
                                   }`}
                                 />
                                 <span className="min-w-0">
-                                  <span className="block truncate font-semibold text-gray-900">
-                                    {projectName(projectGroup.project.id)}
+                                  <span className="flex items-center gap-1.5 truncate font-semibold text-gray-900">
+                                    {projectGroup.project.priority === "High" && (
+                                      <Star
+                                        className="h-3.5 w-3.5 shrink-0 fill-amber-500 text-amber-500"
+                                        aria-label="Priority client"
+                                      />
+                                    )}
+                                    <span className="truncate">
+                                      {projectName(projectGroup.project.id)}
+                                    </span>
                                   </span>
                                   <span className="mt-1 block truncate text-xs text-gray-500">
-                                    Click to view matching tasks
+                                    {projectGroup.project.priority === "High"
+                                      ? "Priority client · click to view tasks"
+                                      : "Click to view matching tasks"}
                                   </span>
                                 </span>
                               </button>

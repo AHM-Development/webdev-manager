@@ -24,6 +24,8 @@ export function KanbanBoard({
   projectId,
   clientName,
   getClientName,
+  priorityClient,
+  getPriorityClient,
   tasks,
   assigneeNames,
   onMove,
@@ -33,6 +35,8 @@ export function KanbanBoard({
   projectId: string;
   clientName?: string;
   getClientName?: (task: Task) => string | undefined;
+  priorityClient?: boolean;
+  getPriorityClient?: (task: Task) => boolean;
   tasks: Task[];
   assigneeNames: string[];
   onMove: MoveHandler;
@@ -51,6 +55,8 @@ export function KanbanBoard({
           assignee={col}
           clientName={clientName}
           getClientName={getClientName}
+          priorityClient={priorityClient}
+          getPriorityClient={getPriorityClient}
           tasks={tasksForColumn(tasks, col, knownAssignees)}
           onMove={onMove}
           onChangeStatus={onChangeStatus}

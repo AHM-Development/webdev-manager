@@ -70,7 +70,9 @@ Args differ per action:
   is ignored, which is why a task can come out "Untitled".)
 
 `tasks.create` fields (all under `input`): `title` (required), `description`,
-`checklist` (`[{ "title": "…", "completed": false }]`), `projectId` (string),
+`checklist` (`[{ "title": "…", "completed": false }]`),
+`attachments` (`[{ "name": "…", "url": "https://…", "type": "link" | "file" }]` —
+links or files referenced by URL), `projectId` (string),
 `assigneeName` (string, the person's name), `dueDate` (`YYYY-MM-DD`), `priority`
 (`Low|Medium|High`), `status` (`Backlog|In Progress|Review|Blocked|Done`).
 
@@ -79,6 +81,7 @@ POST /agent/propose
 { "actionKey": "tasks.create", "args": { "input": {
     "title": "Fix contact form on booking page",
     "description": "The form doesn't send…",
+    "attachments": [{ "name": "Bug screenshot", "url": "https://…/shot.png", "type": "file" }],
     "projectId": "25", "assigneeName": "Queenie", "dueDate": "2026-08-01"
 } } }
 ```

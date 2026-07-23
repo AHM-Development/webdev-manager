@@ -169,9 +169,12 @@ export function KanbanColumn({
           <GridListItem
             id={item.id}
             textValue={item.title}
-            className={`kanban-card cursor-grab p-3 outline-none transition-transform hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#0b7de3] data-[dragging=true]:opacity-50 ${
-              isPriority ? "border-l-2 border-l-amber-400" : ""
-            }`}
+            style={
+              isPriority
+                ? { backgroundColor: "#fffbeb", borderLeft: "3px solid #f59e0b" }
+                : undefined
+            }
+            className="kanban-card cursor-grab p-3 outline-none transition-transform hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#0b7de3] data-[dragging=true]:opacity-50"
           >
             <TaskKanbanCard
               task={item}

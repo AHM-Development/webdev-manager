@@ -200,6 +200,11 @@ export function TaskSummary({
                           <TableRow
                             key={projectGroup.project.id}
                             id={projectGroup.project.id}
+                            className={
+                              projectGroup.project.priority === "High"
+                                ? "is-priority-client"
+                                : undefined
+                            }
                           >
                             <TableCell>
                               <button

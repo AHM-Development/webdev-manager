@@ -124,6 +124,19 @@ textarea {
   background-color: #ffffff !important;
 }
 
+/* Priority-client rows: light amber tint + amber left accent. Higher
+   specificity than the white-background rule above so it wins. */
+.app-table-shell tr.is-priority-client td,
+.app-table-shell tr.is-priority-client th,
+.app-table-shell .table__row.is-priority-client .table__cell {
+  background: #fffbeb !important;
+  background-color: #fffbeb !important;
+}
+.app-table-shell tr.is-priority-client td:first-child,
+.app-table-shell .table__row.is-priority-client .table__cell:first-child {
+  box-shadow: inset 3px 0 0 0 #f59e0b;
+}
+
 .app-table-shell .table__column {
   color: #64748b;
   font-size: 0.72rem;

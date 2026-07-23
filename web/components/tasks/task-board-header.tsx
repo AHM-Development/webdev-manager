@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "@heroui/react";
-import { ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { Button, Input } from "@heroui/react";
+import { ChevronDown, ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
 
 import type { Project } from "@/components/projects/data";
 
@@ -12,6 +12,8 @@ export function TaskBoardHeader({
   total,
   canPrev,
   canNext,
+  searchValue,
+  onSearchChange,
   onPrev,
   onNext,
   onOpenSwitcher,
@@ -23,6 +25,8 @@ export function TaskBoardHeader({
   total: number;
   canPrev: boolean;
   canNext: boolean;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
   onPrev: () => void;
   onNext: () => void;
   onOpenSwitcher: () => void;
@@ -67,6 +71,18 @@ export function TaskBoardHeader({
       </div>
 
       <div className="flex items-center gap-3">
+        {onSearchChange && (
+          <div className="relative w-56">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              aria-label="Search board tasks"
+              value={searchValue ?? ""}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="Search task, client, assignee…"
+              className="w-full pl-9"
+            />
+          </div>
+        )}
         {!allClients && (
           <span className="text-sm text-gray-400">
             {index + 1} / {total}

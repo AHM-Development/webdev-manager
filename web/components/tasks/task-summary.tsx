@@ -2,6 +2,7 @@
 
 import {
   Button,
+  Dropdown,
   Input,
   Table,
   TableBody,
@@ -11,11 +12,18 @@ import {
   TableHeader,
   TableRow,
 } from "@heroui/react";
-import { ArrowUpRight, ChevronDown, Flag, Plus, Search, Star } from "lucide-react";
+import {
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  Flag,
+  Plus,
+  Search,
+  Star,
+} from "lucide-react";
 import { useState } from "react";
 
 import type { Project } from "@/components/projects/data";
-import { SearchableFilter } from "@/components/ui/searchable-filter";
 
 import {
   STATUSES,
@@ -61,7 +69,10 @@ export function TaskSummary({
   addTaskLabel?: string;
   readOnly?: boolean;
 }) {
-  const [statusFilter, setStatusFilter] = useState<string>("In Progress");
+  // Empty set = all statuses. Defaults to "In Progress" (matches prior behaviour).
+  const [statuses, setStatuses] = useState<Set<string>>(
+    () => new Set(["In Progress"])
+  );
   const [query, setQuery] = useState("");
   const [openProjects, setOpenProjects] = useState<Set<string>>(
     () => new Set()
@@ -71,13 +82,27 @@ export function TaskSummary({
   const clientNameOf = (id: string) =>
     projects.find((p) => p.id === id)?.clientName ?? "";
   const visible = tasks.filter((t) => {
-    if (statusFilter !== "all" && t.status !== statusFilter) return false;
+    if (statuses.size > 0 && !statuses.has(t.status)) return false;
     if (!q) return true;
     return [t.title, t.assignee, clientNameOf(t.projectId)]
       .join(" ")
       .toLowerCase()
       .includes(q);
   });
+
+  const statusList = [...statuses];
+  const statusTriggerLabel =
+    statuses.size === 0
+      ? "All statuses"
+      : statuses.size === 1
+        ? statusList[0]
+        : `${statuses.size} statuses`;
+  const headingLabel =
+    statuses.size === 0
+      ? "All tasks"
+      : statuses.size === 1
+        ? statusList[0]
+        : "Selected statuses";
 
   const assigneeOrder = [
     ...ASSIGNEE_COLUMNS,
@@ -110,7 +135,7 @@ export function TaskSummary({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-gray-900">
-          {statusFilter === "all" ? "All tasks" : statusFilter} — by Assignee
+          {headingLabel} — by Assignee
         </h2>
         <div className="flex flex-wrap items-center gap-3">
           {onAddTask && (
@@ -128,17 +153,44 @@ export function TaskSummary({
               className="w-full pl-9"
             />
           </div>
-          <SearchableFilter
-            ariaLabel="Filter by status"
-            value={statusFilter}
-            onChange={setStatusFilter}
-            options={[
-              { key: "all", label: "All statuses" },
-              ...STATUSES.map((status) => ({ key: status, label: status })),
-            ]}
-            placeholder="All statuses"
-            triggerClassName="w-40"
-          />
+          <Dropdown>
+            <Dropdown.Trigger
+              aria-label="Filter by status"
+              className="inline-flex w-44 items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <span className="truncate">{statusTriggerLabel}</span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+            </Dropdown.Trigger>
+            <Dropdown.Popover className="min-w-44">
+              <Dropdown.Menu
+                aria-label="Statuses"
+                selectionMode="multiple"
+                selectedKeys={statuses}
+                onSelectionChange={(keys) =>
+                  setStatuses(
+                    keys === "all"
+                      ? new Set(STATUSES)
+                      : new Set(Array.from(keys, String))
+                  )
+                }
+              >
+                {STATUSES.map((status) => (
+                  <Dropdown.Item key={status} id={status} textValue={status}>
+                    <span className="flex items-center gap-2">
+                      <Check
+                        className={`h-4 w-4 ${
+                          statuses.has(status)
+                            ? "text-[var(--brand)]"
+                            : "opacity-0"
+                        }`}
+                      />
+                      {status}
+                    </span>
+                  </Dropdown.Item>
+                ))}
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown>
           <span className="text-sm text-gray-400">
             {visible.length} task{visible.length === 1 ? "" : "s"}
           </span>
@@ -147,8 +199,7 @@ export function TaskSummary({
 
       {groups.length === 0 && (
         <p className="rounded-lg border border-gray-200 py-10 text-center text-sm text-gray-500">
-          No {statusFilter === "all" ? "" : `${statusFilter.toLowerCase()} `}
-          tasks right now.
+          No matching tasks right now.
         </p>
       )}
 

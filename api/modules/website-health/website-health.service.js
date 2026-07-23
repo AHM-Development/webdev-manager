@@ -81,9 +81,16 @@ async function list(input) {
   var page = Math.max(1, Number(input.page) || 1);
   var pageSize = Math.min(100, Math.max(1, Number(input.pageSize) || 20));
   var q = String(input.q || '').trim();
+  var scanStatus = String(input.scanStatus || 'all');
   var offset = (page - 1) * pageSize;
   var params = { q: '%' + q + '%' };
-  var where = q ? 'AND (p.client_name LIKE :q OR pw.name LIKE :q OR pw.url LIKE :q)' : '';
+  var conditions = [];
+  if (q) conditions.push('(p.client_name LIKE :q OR pw.name LIKE :q OR pw.url LIKE :q)');
+  // "Scanned" = has at least one completed/partial scan; "unscanned" = none.
+  var scannedExists = "EXISTS (SELECT 1 FROM website_health_scans hs WHERE hs.website_id = pw.id AND hs.status IN ('completed', 'partial'))";
+  if (scanStatus === 'scanned') conditions.push(scannedExists);
+  else if (scanStatus === 'unscanned') conditions.push('NOT ' + scannedExists);
+  var where = conditions.length ? 'AND ' + conditions.join(' AND ') : '';
   var rows = await db.query(
     `SELECT pw.id AS website_id, pw.name AS website_name, pw.url AS website_url,
        p.id AS project_id, p.client_name,

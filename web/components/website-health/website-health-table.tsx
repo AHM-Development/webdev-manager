@@ -45,6 +45,7 @@ import {
 } from "@/libs/api/website-health";
 import { notify } from "@/libs/notify";
 import { realtimeEvents } from "@/libs/realtime/events";
+import { SearchableFilter } from "@/components/ui/searchable-filter";
 
 import { AhmCorePairingModal } from "./ahm-core-pairing-modal";
 import type { ProjectHealth } from "./data";
@@ -195,6 +196,9 @@ export function WebsiteHealthTable() {
   const [allWebsites, setAllWebsites] = useState<HealthWebsiteRow[]>([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [scanStatus, setScanStatus] = useState<"all" | "scanned" | "unscanned">(
+    "all"
+  );
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -225,7 +229,7 @@ export function WebsiteHealthTable() {
   const load = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      const result = await listWebsiteHealth({ page, pageSize: PAGE_SIZE, q: debouncedSearch });
+      const result = await listWebsiteHealth({ page, pageSize: PAGE_SIZE, q: debouncedSearch, scanStatus });
       setRows(result.websites);
       setTotal(result.pagination.total);
       setTotalPages(result.pagination.totalPages);
@@ -236,7 +240,7 @@ export function WebsiteHealthTable() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch]);
+  }, [page, debouncedSearch, scanStatus]);
 
   useEffect(() => {
     void load(true);
@@ -357,17 +361,34 @@ export function WebsiteHealthTable() {
         ))}
       </div>
 
-      <div className="relative w-full max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <Input
-          aria-label="Search by client or website"
-          value={search}
-          onChange={(event) => {
-            setSearch(event.target.value);
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            aria-label="Search by client or website"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Search client or website…"
+            className="w-full pl-9"
+          />
+        </div>
+        <SearchableFilter
+          ariaLabel="Filter by scan status"
+          value={scanStatus}
+          onChange={(value) => {
+            setScanStatus((value as "all" | "scanned" | "unscanned") || "all");
             setPage(1);
           }}
-          placeholder="Search client or website…"
-          className="w-full pl-9"
+          options={[
+            { key: "all", label: "All websites" },
+            { key: "scanned", label: "Scanned" },
+            { key: "unscanned", label: "Not scanned" },
+          ]}
+          placeholder="All websites"
+          triggerClassName="w-44"
         />
       </div>
 
@@ -433,7 +454,7 @@ export function WebsiteHealthTable() {
           <TableFooter>
             <Pagination>
               <PaginationSummary>
-                {total ? `Showing ${(page - 1) * PAGE_SIZE + 1}-${Math.min(page * PAGE_SIZE, total)} of ${total}` : loading ? "Loading websites..." : debouncedSearch ? `No websites match “${debouncedSearch}”` : "No websites registered"}
+                {total ? `Showing ${(page - 1) * PAGE_SIZE + 1}-${Math.min(page * PAGE_SIZE, total)} of ${total}` : loading ? "Loading websites..." : debouncedSearch ? `No websites match “${debouncedSearch}”` : scanStatus === "scanned" ? "No scanned websites yet" : scanStatus === "unscanned" ? "No unscanned websites" : "No websites registered"}
               </PaginationSummary>
               {totalPages > 1 && (
                 <PaginationContent>

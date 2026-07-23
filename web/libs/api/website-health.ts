@@ -79,7 +79,12 @@ export type WebsiteHealthDetail = {
   audit: SiteAudit | null;
 };
 
-export async function listWebsiteHealth(params?: { page?: number; pageSize?: number; q?: string }) {
+export async function listWebsiteHealth(params?: {
+  page?: number;
+  pageSize?: number;
+  q?: string;
+  scanStatus?: "all" | "scanned" | "unscanned";
+}) {
   const { data } = await apiClient.get<{
     websites: HealthWebsiteRow[];
     overview: {

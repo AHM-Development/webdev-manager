@@ -46,8 +46,18 @@ import {
 } from "@/components/tasks/create-task-modal";
 import { makeChecklistItem } from "@/components/tasks/task-utils";
 
-import type { AppliedTarget, Issue } from "./data";
+import { ISSUE_STATUSES, type AppliedTarget, type Issue, type IssueStatus } from "./data";
 import { issueFormSchema, type IssueFormValues } from "./schema";
+
+// Coerce any legacy/unknown status onto the task set so an un-migrated issue
+// can't silently fail form validation on load.
+function coerceStatus(status: string | undefined): IssueStatus {
+  if (status === "Fixed") return "Done";
+  if (status === "Open") return "Backlog";
+  return (ISSUE_STATUSES as string[]).includes(status ?? "")
+    ? (status as IssueStatus)
+    : "Backlog";
+}
 
 const PRIORITIES: TaskPriority[] = ["Low", "Medium", "High"];
 
@@ -175,7 +185,7 @@ export function IssueModal({
       title: issue?.title ?? "",
       description: issue?.description ?? "",
       priority: issue?.priority ?? "Medium",
-      status: issue?.status ?? "Backlog",
+      status: coerceStatus(issue?.status),
       assignee: issue?.assignee ?? "Unassigned",
       assigneeUserId: issue?.assigneeUserId ?? "",
       startDate: issue?.startDate ?? "",

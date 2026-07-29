@@ -39,9 +39,14 @@ function parseJson(value, fallback) {
   }
 }
 
+// Legacy issue statuses map onto the task set (tolerant during the transition).
+var LEGACY_STATUS = { open: 'Backlog', fixed: 'Done' };
+
 function normalizeStatus(value) {
+  var raw = String(value || '').trim();
+  if (LEGACY_STATUS[raw.toLowerCase()]) return LEGACY_STATUS[raw.toLowerCase()];
   var found = ISSUE_STATUSES.find(function(status) {
-    return status.toLowerCase() === String(value || '').trim().toLowerCase();
+    return status.toLowerCase() === raw.toLowerCase();
   });
   if (!found) throw badRequest('Issue status is invalid.');
   return found;

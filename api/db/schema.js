@@ -617,7 +617,7 @@ async function ensureSchema() {
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
       title VARCHAR(255) NOT NULL,
       description TEXT NULL,
-      status ENUM('Open', 'In Progress', 'Fixed') NOT NULL DEFAULT 'Open',
+      status ENUM('Backlog', 'In Progress', 'Review', 'Blocked', 'Done') NOT NULL DEFAULT 'Backlog',
       created_by BIGINT UNSIGNED NULL,
       updated_by BIGINT UNSIGNED NULL,
       deleted_at DATETIME NULL,
@@ -676,6 +676,20 @@ async function ensureSchema() {
   await alterIgnoreDuplicate('ALTER TABLE issues ADD COLUMN attachments JSON NULL AFTER due_date');
   await alterIgnoreDuplicate('ALTER TABLE issue_applications ADD COLUMN task_id BIGINT UNSIGNED NULL AFTER project_id');
   await alterIgnoreDuplicate('ALTER TABLE issue_applications ADD KEY issue_applications_task_idx (task_id)');
+
+  // Issues now use the task status vocabulary. Migrate the old Open/Fixed values
+  // (idempotent: widen the enum to a superset, remap, then collapse).
+  var issueStatusCol = await db.query("SHOW COLUMNS FROM issues LIKE 'status'");
+  if (issueStatusCol[0] && /'Open'/i.test(String(issueStatusCol[0].Type))) {
+    await db.query(
+      "ALTER TABLE issues MODIFY status ENUM('Open','In Progress','Fixed','Backlog','Review','Blocked','Done') NOT NULL DEFAULT 'Backlog'"
+    );
+    await db.query("UPDATE issues SET status = 'Backlog' WHERE status = 'Open'");
+    await db.query("UPDATE issues SET status = 'Done' WHERE status = 'Fixed'");
+    await db.query(
+      "ALTER TABLE issues MODIFY status ENUM('Backlog','In Progress','Review','Blocked','Done') NOT NULL DEFAULT 'Backlog'"
+    );
+  }
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS website_health_profiles (

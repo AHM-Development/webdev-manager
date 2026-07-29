@@ -220,7 +220,7 @@ export function OperationsDashboard() {
   const overdueTasks = activeTasks.filter(isOverdue);
   const blockedTasks = activeTasks.filter((task) => task.status === "Blocked");
   const reviewTasks = activeTasks.filter((task) => task.status === "Review");
-  const openIssues = issues.filter((issue) => issue.status !== "Fixed");
+  const openIssues = issues.filter((issue) => issue.status !== "Done");
   const atRiskProjects = projects.filter(
     (project) =>
       project.status !== "Live" &&

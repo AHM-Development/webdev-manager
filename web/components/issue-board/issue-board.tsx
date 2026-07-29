@@ -25,12 +25,13 @@ import {
 import { notify } from "@/libs/notify";
 import type { TaskPriority } from "@/components/tasks/data";
 
-import type { Issue, IssueStatus } from "./data";
+import { StatusSelect } from "@/components/tasks/status-select";
+
+import { ISSUE_STATUSES, type Issue, type IssueStatus } from "./data";
 import { IssueModal } from "./issue-modal";
-import { IssueStatusSelect } from "./issue-status-select";
 
 const emptyOptions: IssueOptions = {
-  statuses: ["Open", "In Progress", "Fixed"],
+  statuses: ISSUE_STATUSES,
   targetTypes: ["task", "checklist"],
   priorities: ["Low", "Medium", "High"],
   projects: [],
@@ -203,7 +204,7 @@ export function IssueBoard() {
                     </Chip>
                   </TableCell>
                   <TableCell>
-                    <IssueStatusSelect
+                    <StatusSelect
                       status={issue.status}
                       onChange={(status) => void handleChangeStatus(issue.id, status)}
                     />

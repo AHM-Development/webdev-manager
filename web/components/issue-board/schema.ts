@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-export const issueStatusSchema = z.enum(["Open", "In Progress", "Fixed"]);
+export const issueStatusSchema = z.enum([
+  "Backlog",
+  "In Progress",
+  "Review",
+  "Blocked",
+  "Done",
+]);
 export const issuePrioritySchema = z.enum(["Low", "Medium", "High"]);
 
 /** One schema drives both the create and edit issue modals. The checklist and

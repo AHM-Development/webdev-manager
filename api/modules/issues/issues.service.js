@@ -2,7 +2,8 @@ var db = require('../../db/pool');
 var activity = require('../auth/activity.service');
 var notifications = require('../notifications/notifications.service');
 
-var ISSUE_STATUSES = ['Open', 'In Progress', 'Fixed'];
+// Issues share the task status vocabulary — an issue is a task that spans clients.
+var ISSUE_STATUSES = ['Backlog', 'In Progress', 'Review', 'Blocked', 'Done'];
 var TARGET_TYPES = ['task', 'checklist'];
 var PRIORITIES = ['Low', 'Medium', 'High'];
 
@@ -220,7 +221,7 @@ function normalizeIssuePayload(input, partial) {
     payload.checklist = normalizeChecklist(input.checklist);
   }
   if (!partial || input.status != null) {
-    payload.status = input.status ? normalizeStatus(input.status) : 'Open';
+    payload.status = input.status ? normalizeStatus(input.status) : 'Backlog';
   }
   if (!partial || input.priority != null) {
     payload.priority = safePriority(input.priority, partial ? undefined : 'Medium');
@@ -341,8 +342,9 @@ async function createIssue(input, user, context) {
   return issue;
 }
 
-/** Pushes title/description/priority into linked tasks and merges the checklist
- *  so editing an issue keeps the board tasks (and their progress) in sync. */
+/** Pushes issue fields (title, description, priority, status, assignee, dates)
+ *  into every linked task and merges the checklist, so editing an issue always
+ *  re-syncs its board tasks — overwriting any task-level changes. */
 async function propagateToTasks(issueId, payload, user) {
   var rows = await db.query(
     `SELECT ia.task_id, t.checklist
@@ -368,6 +370,10 @@ async function propagateToTasks(issueId, payload, user) {
     if (payload.priority != null) {
       sets.push('priority = :priority');
       params.priority = payload.priority;
+    }
+    if (payload.status != null) {
+      sets.push('status = :status');
+      params.status = payload.status;
     }
     if (payload.checklist != null) {
       var merged = mergeChecklist(payload.checklist, parseJson(row.checklist, []));
@@ -465,15 +471,17 @@ async function updateStatus(issueId, status, user, context) {
      WHERE id = :issueId AND deleted_at IS NULL`,
     { issueId: issueId, status: normalized, userId: user.id }
   );
+  // Keep every linked board task's status in sync with the issue.
+  await propagateToTasks(issueId, { status: normalized }, user);
   issue = await getIssue(issueId);
   await logIssueActivity(user, context, 'issues.status_update', issue, { status: normalized });
-  if (normalized === 'Fixed') {
+  if (normalized === 'Done') {
     var creatorRows = await db.query('SELECT created_by, title FROM issues WHERE id = :id LIMIT 1', { id: issueId });
     var creator = creatorRows[0];
     if (creator && creator.created_by && String(creator.created_by) !== String(user.id)) {
       notifications.dispatch(notifications.CATEGORY.ISSUES, {
         userId: creator.created_by, audienceType: 'user', type: 'issue_fixed',
-        title: 'An issue you raised was marked fixed', message: creator.title || 'Issue',
+        title: 'An issue you raised was marked done', message: creator.title || 'Issue',
         actionUrl: '/dashboard/issue-boards', metadata: { issueId: String(issueId) },
       }, user, context).catch(function() {});
     }

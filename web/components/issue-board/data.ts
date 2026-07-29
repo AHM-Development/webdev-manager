@@ -1,15 +1,17 @@
-import type {
-  TaskAttachment,
-  TaskChecklistItem,
-  TaskPriority,
-  TaskStatus,
+import {
+  STATUSES,
+  type TaskAttachment,
+  type TaskChecklistItem,
+  type TaskPriority,
+  type TaskStatus,
 } from "@/components/tasks/data";
 
 export type IssueTarget = "task" | "checklist";
 
-export type IssueStatus = "Open" | "In Progress" | "Fixed";
+// An issue is a task that spans clients, so it shares the task status set.
+export type IssueStatus = TaskStatus;
 
-export const ISSUE_STATUSES: IssueStatus[] = ["Open", "In Progress", "Fixed"];
+export const ISSUE_STATUSES: IssueStatus[] = STATUSES;
 
 export type AppliedTarget = {
   id?: string;

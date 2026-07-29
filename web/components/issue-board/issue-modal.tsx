@@ -175,7 +175,7 @@ export function IssueModal({
       title: issue?.title ?? "",
       description: issue?.description ?? "",
       priority: issue?.priority ?? "Medium",
-      status: issue?.status ?? "Open",
+      status: issue?.status ?? "Backlog",
       assignee: issue?.assignee ?? "Unassigned",
       assigneeUserId: issue?.assigneeUserId ?? "",
       startDate: issue?.startDate ?? "",

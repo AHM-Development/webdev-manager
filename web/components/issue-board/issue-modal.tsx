@@ -355,6 +355,12 @@ export function IssueModal({
       const message = err instanceof Error ? err.message : "Unable to save issue.";
       notify.error("Unable to save issue", { description: message });
     }
+  }, (errors) => {
+    // Surface validation failures instead of the submit silently no-op'ing.
+    const first = Object.values(errors)[0] as { message?: string } | undefined;
+    notify.error("Couldn't save the issue", {
+      description: first?.message || "Please check the highlighted fields.",
+    });
   });
 
   return (

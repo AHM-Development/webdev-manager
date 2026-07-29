@@ -678,9 +678,12 @@ async function ensureSchema() {
   await alterIgnoreDuplicate('ALTER TABLE issue_applications ADD KEY issue_applications_task_idx (task_id)');
 
   // Issues now use the task status vocabulary. Migrate the old Open/Fixed values
-  // (idempotent: widen the enum to a superset, remap, then collapse).
+  // (idempotent: widen the enum to a superset, remap, then collapse). Runs
+  // whenever the column isn't already on the task set, regardless of its exact
+  // current values.
   var issueStatusCol = await db.query("SHOW COLUMNS FROM issues LIKE 'status'");
-  if (issueStatusCol[0] && /'Open'/i.test(String(issueStatusCol[0].Type))) {
+  var issueStatusType = issueStatusCol[0] ? String(issueStatusCol[0].Type) : '';
+  if (issueStatusCol[0] && !/^enum\('Backlog','In Progress','Review','Blocked','Done'\)$/i.test(issueStatusType)) {
     await db.query(
       "ALTER TABLE issues MODIFY status ENUM('Open','In Progress','Fixed','Backlog','Review','Blocked','Done') NOT NULL DEFAULT 'Backlog'"
     );

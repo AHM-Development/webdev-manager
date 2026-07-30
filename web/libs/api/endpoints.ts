@@ -121,6 +121,15 @@ export const endpoints = {
   ai: {
     organizeTask: "/ai/tasks/organize",
   },
+  qaCriteria: {
+    base: "/qa-criteria",
+    groups: "/qa-criteria/groups",
+    group: (groupId: string) => `/qa-criteria/groups/${groupId}`,
+    groupItems: (groupId: string) => `/qa-criteria/groups/${groupId}/items`,
+    item: (itemId: string) => `/qa-criteria/items/${itemId}`,
+    prompt: "/qa-criteria/prompt",
+    template: "/qa-criteria/template",
+  },
   websiteHealth: {
     list: "/website-health",
     capabilities: "/website-health/capabilities",

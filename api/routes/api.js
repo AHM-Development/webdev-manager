@@ -17,6 +17,7 @@ var noteRoutes = require('../modules/notes/notes.routes');
 var websiteHealthRoutes = require('../modules/website-health/website-health.routes');
 var wordpressConnectorRoutes = require('../modules/connectors/wordpress.routes');
 var clientLogRoutes = require('../modules/client-logs/client-logs.routes');
+var qaCriteriaRoutes = require('../modules/qa-criteria/qa-criteria.routes');
 var agentRoutes = require('../modules/agent/agent.routes');
 var auth = require('../middleware/auth');
 var limits = require('../middleware/rate-limit');
@@ -48,6 +49,7 @@ router.use('/notes', limits.apiIpRateLimit, noteRoutes);
 router.use('/website-health', limits.apiIpRateLimit, websiteHealthRoutes);
 router.use('/connectors/wordpress', wordpressConnectorRoutes);
 router.use('/client-logs', limits.apiIpRateLimit, clientLogRoutes);
+router.use('/qa-criteria', limits.apiIpRateLimit, qaCriteriaRoutes);
 // Viktor agent surface manages its own auth (delegation token / OAuth client).
 router.use('/agent', limits.apiIpRateLimit, agentRoutes);
 

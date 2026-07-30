@@ -99,6 +99,43 @@ function taskFileUrl(filename) {
   return '/uploads/task-files/' + filename;
 }
 
+// --- QA report template (document upload) --------------------------------
+var QA_TEMPLATE_DIR = path.resolve(__dirname, '../public/uploads/qa-templates');
+fs.mkdirSync(QA_TEMPLATE_DIR, { recursive: true });
+
+var ALLOWED_TEMPLATE_EXT = ['.pdf', '.doc', '.docx'];
+
+function templateExt(originalName) {
+  var ext = path.extname(String(originalName || '')).toLowerCase();
+  return ALLOWED_TEMPLATE_EXT.indexOf(ext) === -1 ? null : ext;
+}
+
+function templateFileFilter(req, file, cb) {
+  if (templateExt(file.originalname)) {
+    cb(null, true);
+    return;
+  }
+  var err = new Error('The report template must be a PDF or Word document.');
+  err.status = 400;
+  err.code = 'INVALID_FILE_TYPE';
+  cb(err);
+}
+
+var uploadQaTemplate = multer({
+  storage: multer.diskStorage({
+    destination: function(req, file, cb) { cb(null, QA_TEMPLATE_DIR); },
+    filename: function(req, file, cb) {
+      cb(null, crypto.randomUUID() + (templateExt(file.originalname) || ''));
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: templateFileFilter,
+});
+
+function qaTemplateUrl(filename) {
+  return '/uploads/qa-templates/' + filename;
+}
+
 module.exports = {
   uploadFormEvidence: uploadFormEvidence,
   formEvidenceUrl: formEvidenceUrl,
@@ -107,4 +144,6 @@ module.exports = {
   uploadTaskFile: uploadTaskFile,
   taskFileUrl: taskFileUrl,
   ALLOWED_TASK_EXT: ALLOWED_TASK_EXT,
+  uploadQaTemplate: uploadQaTemplate,
+  qaTemplateUrl: qaTemplateUrl,
 };

@@ -44,6 +44,7 @@ import { notify } from "@/libs/notify";
 
 import { settingsSchema, type SettingsFormValues } from "./schema";
 import { ClientLogsTemplateSection } from "./client-logs-template-section";
+import { QaCriteriaSection } from "./qa-criteria-section";
 
 type GoogleStatus = "Disconnected" | "Connected";
 type GoogleTestStatus = "Not tested" | "Ready" | "Failed";
@@ -963,6 +964,7 @@ export function SettingsView() {
       </Section>
     </form>
     <ClientLogsTemplateSection />
+    <QaCriteriaSection />
     </div>
   );
 }

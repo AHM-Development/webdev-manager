@@ -1378,6 +1378,109 @@ async function ensureSchema() {
       UNIQUE KEY design_verifications_website_page_uk (website_id, page_key)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
   );
+
+  // ---- QA Criteria (editable, grouped checklists managed in Settings) ----
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS qa_criteria_groups (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(190) NOT NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS qa_criteria_items (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      group_id BIGINT UNSIGNED NOT NULL,
+      text VARCHAR(500) NOT NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      KEY qa_criteria_items_group_idx (group_id),
+      CONSTRAINT qa_criteria_items_group_fk FOREIGN KEY (group_id)
+        REFERENCES qa_criteria_groups(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  // Single-row settings holding the editable AI prompt + the uploaded template.
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS qa_criteria_settings (
+      id TINYINT UNSIGNED NOT NULL PRIMARY KEY DEFAULT 1,
+      ai_prompt TEXT NULL,
+      template_url VARCHAR(500) NULL,
+      template_name VARCHAR(255) NULL,
+      updated_by BIGINT UNSIGNED NULL,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  await seedQaCriteria();
+}
+
+// Default QA-criteria groups (seeded once; fully editable afterwards).
+var QA_CRITERIA_SEED = [
+  { name: 'Technical SEO', items: [
+    'Unique, descriptive <title> (30–60 chars) on every page',
+    'Meta description present and 120–160 chars',
+    'Exactly one H1 per page; headings in order',
+    'Canonical URL set and absolute',
+    'Structured data (JSON-LD) where appropriate',
+    'No noindex on pages that should rank',
+  ] },
+  { name: 'Performance', items: [
+    'Lighthouse performance >= 70 on mobile',
+    'Images compressed and served as WebP/AVIF',
+    'No oversized images (intrinsic far larger than displayed)',
+    'Core Web Vitals (LCP, CLS) in the green',
+  ] },
+  { name: 'Accessibility & Content', items: [
+    'All content images have descriptive alt text',
+    'Sufficient colour contrast on text',
+    'Descriptive link text (no "click here")',
+    'No broken internal or external links',
+  ] },
+  { name: 'Forms', items: [
+    'Each form has a valid recipient address',
+    'Spam protection (reCAPTCHA/Turnstile) present',
+    'Submissions deliver and show a confirmation',
+  ] },
+  { name: 'Security & Maintenance', items: [
+    'Whole site served over HTTPS with a valid certificate',
+    'WordPress core, themes, and plugins up to date',
+    'Scheduled offsite backups configured',
+    'No more administrators than necessary',
+  ] },
+];
+
+var QA_DEFAULT_PROMPT =
+  'You are a website QA assistant. Fetch the QA criteria from GET {{apiUrl}} ' +
+  '(send header "Authorization: Bearer {{token}}"). For the website {{websiteUrl}}, ' +
+  'check it against every criterion in each group, note pass/fail with evidence, ' +
+  'then produce a report following the uploaded document template.';
+
+async function seedQaCriteria() {
+  var existing = await db.query('SELECT COUNT(*) AS n FROM qa_criteria_groups');
+  if (!existing[0] || Number(existing[0].n) === 0) {
+    for (var g = 0; g < QA_CRITERIA_SEED.length; g += 1) {
+      var group = QA_CRITERIA_SEED[g];
+      var res = await db.query(
+        'INSERT INTO qa_criteria_groups (name, sort_order) VALUES (:name, :sort)',
+        { name: group.name, sort: (g + 1) * 100 }
+      );
+      for (var i = 0; i < group.items.length; i += 1) {
+        await db.query(
+          'INSERT INTO qa_criteria_items (group_id, text, sort_order) VALUES (:gid, :text, :sort)',
+          { gid: res.insertId, text: group.items[i], sort: (i + 1) * 100 }
+        );
+      }
+    }
+  }
+  var settings = await db.query('SELECT id FROM qa_criteria_settings WHERE id = 1');
+  if (!settings[0]) {
+    await db.query(
+      'INSERT INTO qa_criteria_settings (id, ai_prompt) VALUES (1, :prompt)',
+      { prompt: QA_DEFAULT_PROMPT }
+    );
+  }
 }
 
 module.exports = {

@@ -78,8 +78,7 @@ type TabId =
   | "overview"
   | "pages"
   | "lighthouse"
-  | "seo"
-  | "design"
+  | "website-qa"
   | "forms"
   | "wordpress";
 
@@ -87,8 +86,7 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "pages", label: "Pages", icon: FileText },
   { id: "lighthouse", label: "Lighthouse", icon: Gauge },
-  { id: "seo", label: "Technical SEO", icon: Search },
-  { id: "design", label: "Design QA", icon: Monitor },
+  { id: "website-qa", label: "Website QA", icon: Search },
   { id: "forms", label: "Forms", icon: FileText },
   { id: "wordpress", label: "Website Checklists", icon: Plug },
 ];
@@ -1459,8 +1457,19 @@ export function HealthDrawer({
     if (tab === "overview") return <OverviewTab audit={audit} />;
     if (tab === "pages") return <PagesTab audit={audit} />;
     if (tab === "lighthouse") return <LighthouseTab audit={audit} />;
-    if (tab === "seo") return <SeoTab audit={audit} />;
-    if (tab === "design") return <DesignTab audit={audit} websiteId={websiteId} />;
+    if (tab === "website-qa")
+      return (
+        <div className="space-y-8">
+          <div>
+            <h3 className="mb-3 text-sm font-semibold text-slate-900">Technical SEO</h3>
+            <SeoTab audit={audit} />
+          </div>
+          <div>
+            <h3 className="mb-3 text-sm font-semibold text-slate-900">Design QA</h3>
+            <DesignTab audit={audit} websiteId={websiteId} />
+          </div>
+        </div>
+      );
     if (tab === "forms") return <FormsTab audit={audit} websiteId={websiteId} />;
     return <WordPressTab audit={audit} />;
   }, [audit, tab, websiteId]);

@@ -309,49 +309,18 @@ function PagesTab({ audit }: { audit: SiteAudit }) {
   return (
     <Table aria-label="Page health summary">
       <TableScrollContainer>
-        <TableContent className="min-w-[820px]">
+        <TableContent className="min-w-105">
           <TableHeader>
             <TableColumn id="page" isRowHeader>Page</TableColumn>
             <TableColumn id="status">Status</TableColumn>
-            <TableColumn id="lighthouse">Lighthouse</TableColumn>
-            <TableColumn id="seo">SEO</TableColumn>
-            <TableColumn id="design">Design QA</TableColumn>
-            <TableColumn id="forms">Forms</TableColumn>
-            <TableColumn id="issues">Issues</TableColumn>
           </TableHeader>
           <TableBody>
-            {audit.pages.map((page) => {
-              const formIssues = page.forms.filter(
-                (form) => form.submitStatus === "failed" || form.recaptcha === "missing"
-              ).length;
-              const issues =
-                Object.values(page.seoChecks).filter((status) => status !== "pass").length +
-                page.designQa.issues.length +
-                formIssues;
-              return (
-                <TableRow key={page.id} id={page.id}>
-                  <TableCell><PageName page={page} /></TableCell>
-                  <TableCell><Chip size="sm" variant="soft" color="success">200</Chip></TableCell>
-                  <TableCell><ScoreText score={page.speedMobile.performance} /></TableCell>
-                  <TableCell><ScoreText score={page.technicalSeoScore} /></TableCell>
-                  <TableCell>
-                    <Chip
-                      size="sm"
-                      variant="soft"
-                      color={page.designQa.issues.length ? "warning" : "success"}
-                    >
-                      {page.designQa.figmaMatch}
-                    </Chip>
-                  </TableCell>
-                  <TableCell>{page.forms.length}</TableCell>
-                  <TableCell>
-                    <span className={issues ? "font-semibold text-red-600" : "text-slate-500"}>
-                      {issues}
-                    </span>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+            {audit.pages.map((page) => (
+              <TableRow key={page.id} id={page.id}>
+                <TableCell><PageName page={page} /></TableCell>
+                <TableCell><Chip size="sm" variant="soft" color="success">200</Chip></TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </TableContent>
       </TableScrollContainer>

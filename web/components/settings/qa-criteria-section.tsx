@@ -148,34 +148,15 @@ export function QaCriteriaSection() {
         <p className="text-sm text-slate-400">Loading…</p>
       ) : (
         <div className="space-y-6">
-          {/* Reference: criteria API + report template */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <ReadOnlyRow
-              label="Criteria API (GET)"
-              value={CRITERIA_API_URL}
-              onCopy={() => {
-                void navigator.clipboard?.writeText(CRITERIA_API_URL);
-                notify.success("Copied");
-              }}
-            />
-            <ReadOnlyRow
-              label="Report template"
-              value={config.template ? config.template.name : "No template uploaded"}
-              right={
-                config.template ? (
-                  <a
-                    href={assetUrl(config.template.url)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="shrink-0 text-[#0b7de3] hover:underline"
-                    aria-label="Open template"
-                  >
-                    <FileText className="h-4 w-4" />
-                  </a>
-                ) : undefined
-              }
-            />
-          </div>
+          {/* Reference: criteria API */}
+          <ReadOnlyRow
+            label="Criteria API (GET)"
+            value={CRITERIA_API_URL}
+            onCopy={() => {
+              void navigator.clipboard?.writeText(CRITERIA_API_URL);
+              notify.success("Copied");
+            }}
+          />
 
           {/* Prompt + template upload */}
           <div className="grid gap-4 md:grid-cols-[1fr_auto]">
@@ -227,8 +208,23 @@ export function QaCriteriaSection() {
                 ) : (
                   <Upload className="h-5 w-5" />
                 )}
-                {uploading ? "Uploading…" : "Upload PDF / Word"}
+                {uploading
+                  ? "Uploading…"
+                  : config.template
+                    ? "Replace template"
+                    : "Upload PDF / Word"}
               </button>
+              {config.template && (
+                <a
+                  href={assetUrl(config.template.url)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 flex items-center gap-1.5 text-xs text-[#0b7de3] hover:underline"
+                >
+                  <FileText className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{config.template.name}</span>
+                </a>
+              )}
             </div>
           </div>
 

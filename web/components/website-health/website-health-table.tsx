@@ -28,6 +28,7 @@ import {
   MoreHorizontal,
   Plug,
   Radar,
+  RotateCcw,
   Search,
   Settings2,
 } from "lucide-react";
@@ -35,10 +36,12 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { Project } from "@/components/projects/data";
 import { useRealtimeEvent } from "@/hooks/use-realtime";
+import { useAuth } from "@/libs/hooks/useAuth";
 import {
   getWebsiteHealth,
   getWebsiteHealthCapabilities,
   listWebsiteHealth,
+  resetWebsiteHealth,
   startWebsiteHealthScan,
   type HealthCapabilities,
   type HealthWebsiteRow,
@@ -186,6 +189,8 @@ function ActiveScansPanel({ scans }: { scans: ActiveScanItem[] }) {
 }
 
 export function WebsiteHealthTable() {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "superadmin";
   const drawer = useOverlayState();
   const exportModal = useOverlayState();
   const scanModal = useOverlayState();
@@ -328,6 +333,21 @@ export function WebsiteHealthTable() {
     pairingModal.open();
   };
 
+  const handleReset = async (row: HealthWebsiteRow) => {
+    const ok = window.confirm(
+      `Reset ${row.name}? This permanently deletes all its scan history and results, returning it to "not scanned". This cannot be undone.`
+    );
+    if (!ok) return;
+    try {
+      await resetWebsiteHealth(row.id);
+      notify.success("Website health reset", { description: row.name });
+      await load();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The website could not be reset.";
+      notify.error("Unable to reset", { description: message });
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
@@ -429,21 +449,35 @@ export function WebsiteHealthTable() {
                       <TableCell><Metric value={summary?.checklistIssues} className={issueTone(summary?.checklistIssues)} /></TableCell>
                       <TableCell><span className="whitespace-nowrap text-sm text-slate-600">{formatDateTime(scan?.completedAt || scan?.createdAt)}</span></TableCell>
                       <TableCell>
-                        <Dropdown>
-                          <Dropdown.Trigger aria-label={`Open actions for ${row.name}`} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-950">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Dropdown.Trigger>
-                          <Dropdown.Popover placement="bottom end">
-                            <Dropdown.Menu aria-label={`${row.name} actions`}>
-                              <Dropdown.Item id="view" onAction={() => void openDetails(row, "drawer")}><span className="flex items-center gap-2"><Eye className="h-4 w-4" />View details</span></Dropdown.Item>
-                              <Dropdown.Item id="scan" isDisabled={active} onAction={() => openScan(row.id)}><span className="flex items-center gap-2"><Radar className="h-4 w-4" />Run scan</span></Dropdown.Item>
-                              <Dropdown.Item id="connect" onAction={() => openPairing(row)}><span className="flex items-center gap-2"><Plug className="h-4 w-4" />Connect AHM Core</span></Dropdown.Item>
-                              <Dropdown.Item id="settings" onAction={() => { setSelectedRow(row); profileModal.open(); }}><span className="flex items-center gap-2"><Settings2 className="h-4 w-4" />Scan settings</span></Dropdown.Item>
-                              <Dropdown.Item id="export" isDisabled={!summary} onAction={() => void openDetails(row, "export")}><span className="flex items-center gap-2"><Download className="h-4 w-4" />Export report</span></Dropdown.Item>
-                              <Dropdown.Item id="open" href={row.url} target="_blank"><span className="flex items-center gap-2"><ExternalLink className="h-4 w-4" />Open website</span></Dropdown.Item>
-                            </Dropdown.Menu>
-                          </Dropdown.Popover>
-                        </Dropdown>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            aria-label={`View ${row.name}`}
+                            onPress={() => void openDetails(row, "drawer")}
+                          >
+                            <Eye className="h-4 w-4" />
+                            View
+                          </Button>
+                          <Dropdown>
+                            <Dropdown.Trigger aria-label={`Open actions for ${row.name}`} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-950">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Dropdown.Trigger>
+                            <Dropdown.Popover placement="bottom end">
+                              <Dropdown.Menu aria-label={`${row.name} actions`}>
+                                <Dropdown.Item id="view" onAction={() => void openDetails(row, "drawer")}><span className="flex items-center gap-2"><Eye className="h-4 w-4" />View details</span></Dropdown.Item>
+                                <Dropdown.Item id="scan" isDisabled={active} onAction={() => openScan(row.id)}><span className="flex items-center gap-2"><Radar className="h-4 w-4" />Run scan</span></Dropdown.Item>
+                                <Dropdown.Item id="connect" onAction={() => openPairing(row)}><span className="flex items-center gap-2"><Plug className="h-4 w-4" />Connect AHM Core</span></Dropdown.Item>
+                                <Dropdown.Item id="settings" onAction={() => { setSelectedRow(row); profileModal.open(); }}><span className="flex items-center gap-2"><Settings2 className="h-4 w-4" />Scan settings</span></Dropdown.Item>
+                                <Dropdown.Item id="export" isDisabled={!summary} onAction={() => void openDetails(row, "export")}><span className="flex items-center gap-2"><Download className="h-4 w-4" />Export report</span></Dropdown.Item>
+                                <Dropdown.Item id="open" href={row.url} target="_blank"><span className="flex items-center gap-2"><ExternalLink className="h-4 w-4" />Open website</span></Dropdown.Item>
+                                {isSuperAdmin ? (
+                                  <Dropdown.Item id="reset" isDisabled={active} onAction={() => void handleReset(row)}><span className="flex items-center gap-2 text-red-600"><RotateCcw className="h-4 w-4" />Reset</span></Dropdown.Item>
+                                ) : null}
+                              </Dropdown.Menu>
+                            </Dropdown.Popover>
+                          </Dropdown>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

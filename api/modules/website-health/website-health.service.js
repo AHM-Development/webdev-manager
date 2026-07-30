@@ -248,6 +248,17 @@ async function getScan(scanId) {
   return mapScan(rows[0]);
 }
 
+// Clears a website's scan history (pages + findings cascade), returning it to
+// an "unscanned" state. Super-admin only (enforced at the route).
+async function resetWebsite(websiteId) {
+  await websiteRow(websiteId); // 404s if the website doesn't exist
+  var result = await db.query(
+    'DELETE FROM website_health_scans WHERE website_id = :websiteId',
+    { websiteId: websiteId }
+  );
+  return { ok: true, deletedScans: result.affectedRows || 0 };
+}
+
 async function cancel(scanId, user, context) {
   var scan = await getScan(scanId);
   if (!['queued', 'running'].includes(scan.status)) fail(409, 'SCAN_NOT_ACTIVE', 'Only active scans can be cancelled.');
@@ -445,4 +456,4 @@ async function deleteDesignVerification(websiteId, pageKey) {
   return { deleted: true };
 }
 
-module.exports = { list: list, getLatest: getLatest, history: history, createScan: createScan, getScan: getScan, cancel: cancel, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, report: report, websiteRow: websiteRow, parseJson: parseJson, capabilities: capabilities, listFormVerifications: listFormVerifications, saveFormVerification: saveFormVerification, deleteFormVerification: deleteFormVerification, listDesignVerifications: listDesignVerifications, saveDesignVerification: saveDesignVerification, deleteDesignVerification: deleteDesignVerification, DEFAULT_ESSENTIAL_PLUGINS: DEFAULT_ESSENTIAL_PLUGINS, DEFAULT_CONTENT_STALENESS_DAYS: DEFAULT_CONTENT_STALENESS_DAYS };
+module.exports = { list: list, getLatest: getLatest, history: history, createScan: createScan, getScan: getScan, cancel: cancel, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, report: report, websiteRow: websiteRow, resetWebsite: resetWebsite, parseJson: parseJson, capabilities: capabilities, listFormVerifications: listFormVerifications, saveFormVerification: saveFormVerification, deleteFormVerification: deleteFormVerification, listDesignVerifications: listDesignVerifications, saveDesignVerification: saveDesignVerification, deleteDesignVerification: deleteDesignVerification, DEFAULT_ESSENTIAL_PLUGINS: DEFAULT_ESSENTIAL_PLUGINS, DEFAULT_CONTENT_STALENESS_DAYS: DEFAULT_CONTENT_STALENESS_DAYS };

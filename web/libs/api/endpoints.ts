@@ -125,6 +125,7 @@ export const endpoints = {
     list: "/website-health",
     capabilities: "/website-health/capabilities",
     website: (websiteId: string) => `/website-health/websites/${websiteId}`,
+    reset: (websiteId: string) => `/website-health/websites/${websiteId}/reset`,
     history: (websiteId: string) => `/website-health/websites/${websiteId}/history`,
     profile: (websiteId: string) => `/website-health/websites/${websiteId}/profile`,
     formTest: (websiteId: string) => `/website-health/websites/${websiteId}/forms/test`,

@@ -100,6 +100,13 @@ export async function listWebsiteHealth(params?: {
   return data;
 }
 
+export async function resetWebsiteHealth(websiteId: string) {
+  const { data } = await apiClient.post<{ ok: boolean; deletedScans: number }>(
+    endpoints.websiteHealth.reset(websiteId)
+  );
+  return data;
+}
+
 export async function getWebsiteHealth(websiteId: string) {
   const { data } = await apiClient.get<WebsiteHealthDetail>(endpoints.websiteHealth.website(websiteId));
   return data;

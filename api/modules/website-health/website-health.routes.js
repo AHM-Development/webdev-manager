@@ -21,6 +21,8 @@ router.post('/scans/:scanId/cancel', auth.requireRoles(roles.WRITE_ROLES), contr
 router.post('/scans/:scanId/retry', auth.requireRoles(roles.WRITE_ROLES), controller.retry);
 router.get('/scans/:scanId/report', controller.report);
 router.patch('/findings/:findingId', auth.requireRoles(roles.WRITE_ROLES), controller.updateFinding);
+// Clear a website's scan history — Super Admin only (destructive).
+router.post('/websites/:websiteId/reset', auth.requireRoles(roles.MANAGER_ROLES), controller.reset);
 router.get('/websites/:websiteId', controller.latest);
 router.get('/websites/:websiteId/history', controller.history);
 router.get('/websites/:websiteId/profile', controller.getProfile);

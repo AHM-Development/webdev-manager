@@ -1409,46 +1409,113 @@ async function ensureSchema() {
       ai_prompt TEXT NULL,
       template_url VARCHAR(500) NULL,
       template_name VARCHAR(255) NULL,
+      seed_version INT NOT NULL DEFAULT 0,
       updated_by BIGINT UNSIGNED NULL,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+  await alterIgnoreDuplicate('ALTER TABLE qa_criteria_settings ADD COLUMN seed_version INT NOT NULL DEFAULT 0');
   await seedQaCriteria();
 }
 
 // Default QA-criteria groups (seeded once; fully editable afterwards).
 var QA_CRITERIA_SEED = [
-  { name: 'Technical SEO', items: [
-    'Unique, descriptive <title> (30–60 chars) on every page',
-    'Meta description present and 120–160 chars',
-    'Exactly one H1 per page; headings in order',
-    'Canonical URL set and absolute',
-    'Structured data (JSON-LD) where appropriate',
-    'No noindex on pages that should rank',
+  { name: 'Design & Layout vs Figma', items: [
+    'Desktop layout matches Figma',
+    'Tablet layout matches Figma',
+    'Mobile layout matches Figma',
+    'Section-by-section visual diff (missing/extra sections)',
+    'Spacing/padding/margins match spec',
+    'Alignment of elements (overlap/clipped-content detection)',
+    'Content overflowing/clipped',
+    'Elements spilling outside viewport',
+    'Tap targets under 40px on mobile',
   ] },
-  { name: 'Performance', items: [
-    'Lighthouse performance >= 70 on mobile',
-    'Images compressed and served as WebP/AVIF',
-    'No oversized images (intrinsic far larger than displayed)',
-    'Core Web Vitals (LCP, CLS) in the green',
+  { name: 'Typography & Colour', items: [
+    'Font family consistency',
+    'Font sizes match spec',
+    'Font weights match spec',
+    'Colour values match brand/Figma palette',
+    'Heading hierarchy correct (no skipped levels, one H1)',
   ] },
-  { name: 'Accessibility & Content', items: [
-    'All content images have descriptive alt text',
-    'Sufficient colour contrast on text',
-    'Descriptive link text (no "click here")',
-    'No broken internal or external links',
+  { name: 'Responsiveness & Devices', items: [
+    'Desktop rendering (1440px+)',
+    'Tablet rendering',
+    'Mobile rendering (375px)',
+  ] },
+  { name: 'Navigation, Buttons & Links', items: [
+    'Nav menu links go to correct pages',
+    'Footer links correct',
+    'No broken internal links',
+    'No broken external links',
+    'Buttons functional (not dead/broken styling)',
+    'Link text not generic ("click here")',
+    'Booking links consistently point to the same URL across all pages',
   ] },
   { name: 'Forms', items: [
-    'Each form has a valid recipient address',
-    'Spam protection (reCAPTCHA/Turnstile) present',
-    'Submissions deliver and show a confirmation',
+    'SMTP/mail-sending plugin present (mail delivery capability configured)',
+    'Required-field validation works',
+    'Spam protection (reCAPTCHA) present',
   ] },
-  { name: 'Security & Maintenance', items: [
-    'Whole site served over HTTPS with a valid certificate',
-    'WordPress core, themes, and plugins up to date',
-    'Scheduled offsite backups configured',
-    'No more administrators than necessary',
+  { name: 'Images & Media', items: [
+    'No missing alt text',
+    'No oversized/unoptimised images',
+    'No placeholder/stock/dummy images remaining',
+    'No dummy or template video remaining',
   ] },
+  { name: 'Content Accuracy — sitewide consistency', items: [
+    'Doctor name consistent on every page',
+    'Professional title/credentials consistent on every page',
+    'Clinic name consistent on every page',
+    'Clinic address consistent on every page',
+    'Phone number consistent on every page',
+    'Email address consistent on every page',
+    'GMC/registration number consistent on every page',
+    'Treatments/services list consistent across nav, pages, and summaries',
+    'Fees/pricing info consistent across all pages',
+    "Testimonials belong to this client's field (flags out-of-place/reused testimonials)",
+    'No leftover text/data from another doctor/client/template (cross-contamination check)',
+    'Social media links consistent across all pages and resolve correctly',
+  ] },
+  { name: 'Legal & Compliance', items: [
+    'Privacy Policy present, complete, no placeholder text',
+    'Terms & Conditions present, correctly labelled',
+    'Cookie notice/banner present and functional',
+    'Footer shows correct copyright year, company name, and "Powered by Allied Health Media" text hyperlinked to https://alliedhealthmedia.co.uk/ on every page',
+  ] },
+  { name: 'SEO', items: [
+    'Page titles set and under length',
+    'Meta descriptions set and under length',
+    'One H1 per page, correct heading order',
+    'Canonical tags present',
+    'Open Graph / social share image set',
+    'Structured data / schema markup present',
+    'XML sitemap present and correct',
+  ] },
+  { name: 'Security & Technical', items: [
+    'SSL/HTTPS valid',
+    'WordPress core, theme, plugins up to date',
+    'Known vulnerable plugins flagged',
+    'Basic security headers present',
+  ] },
+  { name: 'Accessibility', items: [
+    'Colour contrast acceptable',
+    'Alt text present and descriptive',
+    'Keyboard navigability',
+  ] },
+  { name: 'Pre-Launch Final Checks', items: [
+    'Analytics (GA4/GTM) installed and firing',
+    'Conversion tracking working',
+    'DNS/redirects prepared',
+    'Live site re-checked within an hour of launch (repeat items A-L on production URL)',
+  ] },
+];
+
+// Bump when QA_CRITERIA_SEED changes so existing deployments still on the
+// previous untouched default set get re-seeded.
+var QA_SEED_VERSION = 2;
+var QA_OLD_DEFAULT_GROUPS = [
+  'Technical SEO', 'Performance', 'Accessibility & Content', 'Forms', 'Security & Maintenance',
 ];
 
 var QA_DEFAULT_PROMPT =
@@ -1457,29 +1524,54 @@ var QA_DEFAULT_PROMPT =
   'check it against every criterion in each group, note pass/fail with evidence, ' +
   'then produce a report following the uploaded document template.';
 
-async function seedQaCriteria() {
-  var existing = await db.query('SELECT COUNT(*) AS n FROM qa_criteria_groups');
-  if (!existing[0] || Number(existing[0].n) === 0) {
-    for (var g = 0; g < QA_CRITERIA_SEED.length; g += 1) {
-      var group = QA_CRITERIA_SEED[g];
-      var res = await db.query(
-        'INSERT INTO qa_criteria_groups (name, sort_order) VALUES (:name, :sort)',
-        { name: group.name, sort: (g + 1) * 100 }
+async function insertQaSeed() {
+  for (var g = 0; g < QA_CRITERIA_SEED.length; g += 1) {
+    var group = QA_CRITERIA_SEED[g];
+    var res = await db.query(
+      'INSERT INTO qa_criteria_groups (name, sort_order) VALUES (:name, :sort)',
+      { name: group.name, sort: (g + 1) * 100 }
+    );
+    for (var i = 0; i < group.items.length; i += 1) {
+      await db.query(
+        'INSERT INTO qa_criteria_items (group_id, text, sort_order) VALUES (:gid, :text, :sort)',
+        { gid: res.insertId, text: group.items[i], sort: (i + 1) * 100 }
       );
-      for (var i = 0; i < group.items.length; i += 1) {
-        await db.query(
-          'INSERT INTO qa_criteria_items (group_id, text, sort_order) VALUES (:gid, :text, :sort)',
-          { gid: res.insertId, text: group.items[i], sort: (i + 1) * 100 }
-        );
-      }
     }
   }
-  var settings = await db.query('SELECT id FROM qa_criteria_settings WHERE id = 1');
+}
+
+async function seedQaCriteria() {
+  // Ensure the single settings row exists.
+  var settings = await db.query('SELECT seed_version FROM qa_criteria_settings WHERE id = 1');
   if (!settings[0]) {
     await db.query(
-      'INSERT INTO qa_criteria_settings (id, ai_prompt) VALUES (1, :prompt)',
+      'INSERT INTO qa_criteria_settings (id, ai_prompt, seed_version) VALUES (1, :prompt, 0)',
       { prompt: QA_DEFAULT_PROMPT }
     );
+    settings = await db.query('SELECT seed_version FROM qa_criteria_settings WHERE id = 1');
+  }
+  var seedVersion = Number(settings[0].seed_version || 0);
+
+  var groups = await db.query('SELECT name FROM qa_criteria_groups ORDER BY sort_order ASC, id ASC');
+
+  if (groups.length === 0) {
+    await insertQaSeed();
+  } else if (seedVersion < QA_SEED_VERSION) {
+    // Replace ONLY if the current groups are still the untouched previous
+    // default set — never wipe criteria someone has customised.
+    var names = groups.map(function(row) { return row.name; });
+    var isOldDefault =
+      names.length === QA_OLD_DEFAULT_GROUPS.length &&
+      names.every(function(name) { return QA_OLD_DEFAULT_GROUPS.indexOf(name) !== -1; });
+    if (isOldDefault) {
+      await db.query('DELETE FROM qa_criteria_groups'); // items cascade
+      await insertQaSeed();
+    }
+  }
+
+  // Mark migrated so we neither re-check nor re-seed on future boots.
+  if (seedVersion < QA_SEED_VERSION) {
+    await db.query('UPDATE qa_criteria_settings SET seed_version = :v WHERE id = 1', { v: QA_SEED_VERSION });
   }
 }
 

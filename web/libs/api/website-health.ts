@@ -107,6 +107,33 @@ export async function resetWebsiteHealth(websiteId: string) {
   return data;
 }
 
+export type WebsiteQaStatus = "pass" | "fail" | "warning" | "na";
+export type WebsiteQaItem = {
+  id: string;
+  text: string;
+  status: WebsiteQaStatus | null;
+  note: string;
+  checkedAt: string | null;
+};
+export type WebsiteQaResults = {
+  groups: { id: string; name: string; items: WebsiteQaItem[] }[];
+  summary: {
+    pass: number;
+    fail: number;
+    warning: number;
+    na: number;
+    notChecked: number;
+    total: number;
+  };
+};
+
+export async function getWebsiteQaResults(websiteId: string) {
+  const { data } = await apiClient.get<WebsiteQaResults>(
+    endpoints.websiteHealth.qaResults(websiteId)
+  );
+  return data;
+}
+
 export async function getWebsiteHealth(websiteId: string) {
   const { data } = await apiClient.get<WebsiteHealthDetail>(endpoints.websiteHealth.website(websiteId));
   return data;

@@ -23,6 +23,12 @@ router.get('/scans/:scanId/report', controller.report);
 router.patch('/findings/:findingId', auth.requireRoles(roles.WRITE_ROLES), controller.updateFinding);
 // Clear a website's scan history — Super Admin only (destructive).
 router.post('/websites/:websiteId/reset', auth.requireRoles(roles.MANAGER_ROLES), controller.reset);
+
+// Website QA — the AI pushes findings against the QA criteria; anyone may read.
+router.get('/websites/:websiteId/qa-results', controller.getQaResults);
+router.post('/websites/:websiteId/qa-results', auth.requireRoles(roles.WRITE_ROLES), controller.submitQaResults);
+router.delete('/websites/:websiteId/qa-results', auth.requireRoles(roles.WRITE_ROLES), controller.resetQaResults);
+
 router.get('/websites/:websiteId', controller.latest);
 router.get('/websites/:websiteId/history', controller.history);
 router.get('/websites/:websiteId/profile', controller.getProfile);

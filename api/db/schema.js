@@ -1415,6 +1415,29 @@ async function ensureSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
   await alterIgnoreDuplicate('ALTER TABLE qa_criteria_settings ADD COLUMN seed_version INT NOT NULL DEFAULT 0');
+
+  // Per-website QA findings the AI pushes against each criterion.
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS website_qa_results (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      website_id BIGINT UNSIGNED NOT NULL,
+      criterion_id BIGINT UNSIGNED NOT NULL,
+      status ENUM('pass', 'fail', 'warning', 'na') NOT NULL,
+      note TEXT NULL,
+      submitted_by BIGINT UNSIGNED NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY website_qa_results_uk (website_id, criterion_id),
+      KEY website_qa_results_website_idx (website_id),
+      CONSTRAINT website_qa_results_website_fk FOREIGN KEY (website_id)
+        REFERENCES project_websites(id) ON DELETE CASCADE,
+      CONSTRAINT website_qa_results_criterion_fk FOREIGN KEY (criterion_id)
+        REFERENCES qa_criteria_items(id) ON DELETE CASCADE,
+      CONSTRAINT website_qa_results_user_fk FOREIGN KEY (submitted_by)
+        REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
   await seedQaCriteria();
 }
 

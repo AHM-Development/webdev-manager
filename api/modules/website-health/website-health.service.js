@@ -259,6 +259,82 @@ async function resetWebsite(websiteId) {
   return { ok: true, deletedScans: result.affectedRows || 0 };
 }
 
+// ---- Website QA (AI findings against the editable QA criteria) ----
+var QA_RESULT_STATUSES = ['pass', 'fail', 'warning', 'na'];
+
+/** The QA criteria grouped exactly like Settings, each item annotated with the
+ *  latest finding pushed for this website (null status = not checked yet). */
+async function getQaResults(websiteId) {
+  await websiteRow(websiteId);
+  var groups = await db.query('SELECT id, name FROM qa_criteria_groups ORDER BY sort_order ASC, id ASC');
+  var items = await db.query('SELECT id, group_id, text FROM qa_criteria_items ORDER BY sort_order ASC, id ASC');
+  var results = await db.query(
+    'SELECT criterion_id, status, note, updated_at FROM website_qa_results WHERE website_id = :websiteId',
+    { websiteId: websiteId }
+  );
+  var byCriterion = {};
+  results.forEach(function(row) {
+    byCriterion[String(row.criterion_id)] = { status: row.status, note: row.note || '', checkedAt: row.updated_at };
+  });
+  var summary = { pass: 0, fail: 0, warning: 0, na: 0, notChecked: 0, total: items.length };
+  var itemsByGroup = {};
+  items.forEach(function(item) {
+    var key = String(item.group_id);
+    if (!itemsByGroup[key]) itemsByGroup[key] = [];
+    var res = byCriterion[String(item.id)] || null;
+    if (res) summary[res.status] += 1; else summary.notChecked += 1;
+    itemsByGroup[key].push({
+      id: String(item.id),
+      text: item.text,
+      status: res ? res.status : null,
+      note: res ? res.note : '',
+      checkedAt: res ? res.checkedAt : null,
+    });
+  });
+  return {
+    groups: groups.map(function(group) {
+      return { id: String(group.id), name: group.name, items: itemsByGroup[String(group.id)] || [] };
+    }),
+    summary: summary,
+  };
+}
+
+/** Upsert a batch of findings (called by the AI/co-worker with a token). */
+async function submitQaResults(websiteId, input, user) {
+  await websiteRow(websiteId);
+  var results = input && input.results;
+  if (!Array.isArray(results)) fail(400, 'VALIDATION_ERROR', 'A "results" array is required.');
+  for (var i = 0; i < results.length; i += 1) {
+    var row = results[i] || {};
+    var criterionId = row.criterionId != null ? String(row.criterionId) : '';
+    var status = String(row.status || '').toLowerCase();
+    if (!/^\d+$/.test(criterionId) || QA_RESULT_STATUSES.indexOf(status) === -1) {
+      fail(400, 'VALIDATION_ERROR', 'Each result needs a numeric criterionId and status of pass|fail|warning|na.');
+    }
+    var exists = await db.query('SELECT id FROM qa_criteria_items WHERE id = :id LIMIT 1', { id: criterionId });
+    if (!exists[0]) continue; // criterion no longer exists — skip
+    await db.query(
+      `INSERT INTO website_qa_results (website_id, criterion_id, status, note, submitted_by)
+         VALUES (:websiteId, :criterionId, :status, :note, :userId)
+       ON DUPLICATE KEY UPDATE status = :status, note = :note, submitted_by = :userId`,
+      {
+        websiteId: websiteId,
+        criterionId: criterionId,
+        status: status,
+        note: String(row.note == null ? '' : row.note).slice(0, 2000) || null,
+        userId: user ? user.id : null,
+      }
+    );
+  }
+  return getQaResults(websiteId);
+}
+
+async function resetQaResults(websiteId) {
+  await websiteRow(websiteId);
+  await db.query('DELETE FROM website_qa_results WHERE website_id = :websiteId', { websiteId: websiteId });
+  return getQaResults(websiteId);
+}
+
 async function cancel(scanId, user, context) {
   var scan = await getScan(scanId);
   if (!['queued', 'running'].includes(scan.status)) fail(409, 'SCAN_NOT_ACTIVE', 'Only active scans can be cancelled.');
@@ -456,4 +532,4 @@ async function deleteDesignVerification(websiteId, pageKey) {
   return { deleted: true };
 }
 
-module.exports = { list: list, getLatest: getLatest, history: history, createScan: createScan, getScan: getScan, cancel: cancel, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, report: report, websiteRow: websiteRow, resetWebsite: resetWebsite, parseJson: parseJson, capabilities: capabilities, listFormVerifications: listFormVerifications, saveFormVerification: saveFormVerification, deleteFormVerification: deleteFormVerification, listDesignVerifications: listDesignVerifications, saveDesignVerification: saveDesignVerification, deleteDesignVerification: deleteDesignVerification, DEFAULT_ESSENTIAL_PLUGINS: DEFAULT_ESSENTIAL_PLUGINS, DEFAULT_CONTENT_STALENESS_DAYS: DEFAULT_CONTENT_STALENESS_DAYS };
+module.exports = { list: list, getLatest: getLatest, history: history, createScan: createScan, getScan: getScan, cancel: cancel, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, report: report, websiteRow: websiteRow, resetWebsite: resetWebsite, getQaResults: getQaResults, submitQaResults: submitQaResults, resetQaResults: resetQaResults, parseJson: parseJson, capabilities: capabilities, listFormVerifications: listFormVerifications, saveFormVerification: saveFormVerification, deleteFormVerification: deleteFormVerification, listDesignVerifications: listDesignVerifications, saveDesignVerification: saveDesignVerification, deleteDesignVerification: deleteDesignVerification, DEFAULT_ESSENTIAL_PLUGINS: DEFAULT_ESSENTIAL_PLUGINS, DEFAULT_CONTENT_STALENESS_DAYS: DEFAULT_CONTENT_STALENESS_DAYS };

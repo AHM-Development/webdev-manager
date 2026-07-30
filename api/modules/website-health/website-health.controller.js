@@ -21,6 +21,9 @@ async function capabilities(req, res, next) { try { res.json({ capabilities: ser
 async function getScan(req, res, next) { try { res.json({ scan: await service.getScan(req.params.scanId) }); } catch (err) { next(err); } }
 async function cancel(req, res, next) { try { res.json({ scan: await service.cancel(req.params.scanId, req.user, context(req)) }); } catch (err) { next(err); } }
 async function reset(req, res, next) { try { res.json(await service.resetWebsite(req.params.websiteId, req.user, context(req))); } catch (err) { next(err); } }
+async function getQaResults(req, res, next) { try { res.json(await service.getQaResults(req.params.websiteId)); } catch (err) { next(err); } }
+async function submitQaResults(req, res, next) { try { res.json(await service.submitQaResults(req.params.websiteId, req.body || {}, req.user)); } catch (err) { next(err); } }
+async function resetQaResults(req, res, next) { try { res.json(await service.resetQaResults(req.params.websiteId)); } catch (err) { next(err); } }
 async function retry(req, res, next) {
   try {
     var scan = await service.retry(req.params.scanId, req.user, context(req));
@@ -81,4 +84,4 @@ async function deleteDesignVerification(req, res, next) {
   try { res.json(await service.deleteDesignVerification(req.params.websiteId, req.params.pageKey)); } catch (err) { next(err); }
 }
 
-module.exports = { list: list, latest: latest, history: history, createScan: createScan, capabilities: capabilities, getScan: getScan, cancel: cancel, reset: reset, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, checklistList: checklistList, checklistGet: checklistGet, report: report, sendFormTest: sendFormTest, uploadEvidence: uploadEvidence, listFormVerifications: listFormVerifications, saveFormVerification: saveFormVerification, deleteFormVerification: deleteFormVerification, listDesignVerifications: listDesignVerifications, saveDesignVerification: saveDesignVerification, deleteDesignVerification: deleteDesignVerification };
+module.exports = { list: list, latest: latest, history: history, createScan: createScan, capabilities: capabilities, getScan: getScan, cancel: cancel, reset: reset, getQaResults: getQaResults, submitQaResults: submitQaResults, resetQaResults: resetQaResults, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, checklistList: checklistList, checklistGet: checklistGet, report: report, sendFormTest: sendFormTest, uploadEvidence: uploadEvidence, listFormVerifications: listFormVerifications, saveFormVerification: saveFormVerification, deleteFormVerification: deleteFormVerification, listDesignVerifications: listDesignVerifications, saveDesignVerification: saveDesignVerification, deleteDesignVerification: deleteDesignVerification };

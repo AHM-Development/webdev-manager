@@ -73,6 +73,7 @@ import {
   type SiteAudit,
 } from "./data";
 import { ScoreRing } from "./score-ring";
+import { WebsiteQaTab } from "./website-qa-tab";
 
 type TabId =
   | "overview"
@@ -1426,19 +1427,7 @@ export function HealthDrawer({
     if (tab === "overview") return <OverviewTab audit={audit} />;
     if (tab === "pages") return <PagesTab audit={audit} />;
     if (tab === "lighthouse") return <LighthouseTab audit={audit} />;
-    if (tab === "website-qa")
-      return (
-        <div className="space-y-8">
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-slate-900">Technical SEO</h3>
-            <SeoTab audit={audit} />
-          </div>
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-slate-900">Design QA</h3>
-            <DesignTab audit={audit} websiteId={websiteId} />
-          </div>
-        </div>
-      );
+    if (tab === "website-qa") return <WebsiteQaTab websiteId={websiteId} />;
     if (tab === "forms") return <FormsTab audit={audit} websiteId={websiteId} />;
     return <WordPressTab audit={audit} />;
   }, [audit, tab, websiteId]);

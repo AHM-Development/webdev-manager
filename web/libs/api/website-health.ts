@@ -113,6 +113,9 @@ export type WebsiteQaItem = {
   text: string;
   status: WebsiteQaStatus | null;
   note: string;
+  detail: string;
+  checks: string;
+  fix: string;
   checkedAt: string | null;
 };
 export type WebsiteQaResults = {

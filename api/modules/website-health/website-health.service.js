@@ -269,12 +269,19 @@ async function getQaResults(websiteId) {
   var groups = await db.query('SELECT id, name FROM qa_criteria_groups ORDER BY sort_order ASC, id ASC');
   var items = await db.query('SELECT id, group_id, text FROM qa_criteria_items ORDER BY sort_order ASC, id ASC');
   var results = await db.query(
-    'SELECT criterion_id, status, note, updated_at FROM website_qa_results WHERE website_id = :websiteId',
+    'SELECT criterion_id, status, note, detail, checks, fix, updated_at FROM website_qa_results WHERE website_id = :websiteId',
     { websiteId: websiteId }
   );
   var byCriterion = {};
   results.forEach(function(row) {
-    byCriterion[String(row.criterion_id)] = { status: row.status, note: row.note || '', checkedAt: row.updated_at };
+    byCriterion[String(row.criterion_id)] = {
+      status: row.status,
+      note: row.note || '',
+      detail: row.detail || '',
+      checks: row.checks || '',
+      fix: row.fix || '',
+      checkedAt: row.updated_at,
+    };
   });
   var summary = { pass: 0, fail: 0, warning: 0, na: 0, notChecked: 0, total: items.length };
   var itemsByGroup = {};
@@ -288,6 +295,9 @@ async function getQaResults(websiteId) {
       text: item.text,
       status: res ? res.status : null,
       note: res ? res.note : '',
+      detail: res ? res.detail : '',
+      checks: res ? res.checks : '',
+      fix: res ? res.fix : '',
       checkedAt: res ? res.checkedAt : null,
     });
   });
@@ -313,15 +323,23 @@ async function submitQaResults(websiteId, input, user) {
     }
     var exists = await db.query('SELECT id FROM qa_criteria_items WHERE id = :id LIMIT 1', { id: criterionId });
     if (!exists[0]) continue; // criterion no longer exists — skip
+    var clip = function(value) {
+      var text = String(value == null ? '' : value).slice(0, 4000);
+      return text || null;
+    };
     await db.query(
-      `INSERT INTO website_qa_results (website_id, criterion_id, status, note, submitted_by)
-         VALUES (:websiteId, :criterionId, :status, :note, :userId)
-       ON DUPLICATE KEY UPDATE status = :status, note = :note, submitted_by = :userId`,
+      `INSERT INTO website_qa_results (website_id, criterion_id, status, note, detail, checks, fix, submitted_by)
+         VALUES (:websiteId, :criterionId, :status, :note, :detail, :checks, :fix, :userId)
+       ON DUPLICATE KEY UPDATE status = :status, note = :note, detail = :detail,
+         checks = :checks, fix = :fix, submitted_by = :userId`,
       {
         websiteId: websiteId,
         criterionId: criterionId,
         status: status,
-        note: String(row.note == null ? '' : row.note).slice(0, 2000) || null,
+        note: clip(row.note),
+        detail: clip(row.detail),
+        checks: clip(row.checks),
+        fix: clip(row.fix),
         userId: user ? user.id : null,
       }
     );

@@ -1,10 +1,12 @@
 "use client";
 
 import { Chip } from "@heroui/react";
+import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
   getWebsiteQaResults,
+  type WebsiteQaItem,
   type WebsiteQaResults,
   type WebsiteQaStatus,
 } from "@/libs/api/website-health";
@@ -26,6 +28,61 @@ function StatusChip({ status }: { status: WebsiteQaStatus | null }) {
     <Chip size="sm" variant="soft" color={meta.color}>
       {meta.label}
     </Chip>
+  );
+}
+
+function DetailBlock({ label, value }: { label: string; value: string }) {
+  if (!value) return null;
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        {label}
+      </p>
+      <p className="mt-0.5 whitespace-pre-wrap text-sm text-slate-600">{value}</p>
+    </div>
+  );
+}
+
+function QaItemRow({ item }: { item: WebsiteQaItem }) {
+  const [open, setOpen] = useState(false);
+  const hasDetails = !!(item.detail || item.checks || item.fix || item.note);
+  // Fall back to `note` for the "why" block when `detail` wasn't provided.
+  const why = item.detail || item.note;
+
+  return (
+    <li>
+      <div className="flex items-start justify-between gap-3 px-3 py-2.5">
+        <button
+          type="button"
+          onClick={() => hasDetails && setOpen((prev) => !prev)}
+          className={`flex min-w-0 flex-1 items-start gap-2 text-left ${
+            hasDetails ? "cursor-pointer" : "cursor-default"
+          }`}
+          aria-expanded={hasDetails ? open : undefined}
+        >
+          {hasDetails ? (
+            <ChevronDown
+              className={`mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition-transform ${
+                open ? "rotate-180" : ""
+              }`}
+            />
+          ) : (
+            <span className="mt-0.5 h-4 w-4 shrink-0" />
+          )}
+          <span className="min-w-0 text-sm text-slate-700">{item.text}</span>
+        </button>
+        <div className="shrink-0 pt-0.5">
+          <StatusChip status={item.status} />
+        </div>
+      </div>
+      {hasDetails && open && (
+        <div className="space-y-3 border-t border-slate-100 bg-slate-50/60 px-3 py-3 pl-9">
+          <DetailBlock label="Why" value={why} />
+          <DetailBlock label="Checks done" value={item.checks} />
+          <DetailBlock label="Possible fix" value={item.fix} />
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -92,17 +149,7 @@ export function WebsiteQaTab({ websiteId }: { websiteId?: string | null }) {
           </div>
           <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
             {group.items.map((item) => (
-              <li key={item.id} className="flex items-start justify-between gap-3 px-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="text-sm text-slate-700">{item.text}</p>
-                  {item.note && (
-                    <p className="mt-0.5 text-xs text-slate-500">{item.note}</p>
-                  )}
-                </div>
-                <div className="shrink-0 pt-0.5">
-                  <StatusChip status={item.status} />
-                </div>
-              </li>
+              <QaItemRow key={item.id} item={item} />
             ))}
           </ul>
         </div>

@@ -1424,6 +1424,9 @@ async function ensureSchema() {
       criterion_id BIGINT UNSIGNED NOT NULL,
       status ENUM('pass', 'fail', 'warning', 'na') NOT NULL,
       note TEXT NULL,
+      detail TEXT NULL,
+      checks TEXT NULL,
+      fix TEXT NULL,
       submitted_by BIGINT UNSIGNED NULL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -1437,6 +1440,9 @@ async function ensureSchema() {
         REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+  await alterIgnoreDuplicate('ALTER TABLE website_qa_results ADD COLUMN detail TEXT NULL AFTER note');
+  await alterIgnoreDuplicate('ALTER TABLE website_qa_results ADD COLUMN checks TEXT NULL AFTER detail');
+  await alterIgnoreDuplicate('ALTER TABLE website_qa_results ADD COLUMN fix TEXT NULL AFTER checks');
 
   await seedQaCriteria();
 }

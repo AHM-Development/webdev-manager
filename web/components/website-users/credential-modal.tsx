@@ -115,18 +115,22 @@ function valuesFromCredential(
 export function CredentialModal({
   state,
   credential,
+  prefill,
   options,
   onSave,
 }: {
   state: ReturnType<typeof useOverlayState>;
   credential: Credential | null;
+  // Seed values for a brand-new credential (e.g. from an unmanaged WP user).
+  // Unlike `credential`, this does not switch the modal into edit mode.
+  prefill?: Credential | null;
   options: WebsiteCredentialOptions;
   onSave: (cred: Credential) => void | Promise<void>;
 }) {
   const isEdit = !!credential;
   const form = useForm<CredentialFormValues>({
     resolver: zodResolver(credentialFormSchema(isEdit)),
-    defaultValues: valuesFromCredential(credential),
+    defaultValues: valuesFromCredential(credential ?? prefill ?? null),
   });
 
   const projectId = form.watch("projectId");

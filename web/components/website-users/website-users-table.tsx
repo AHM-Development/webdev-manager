@@ -149,6 +149,7 @@ export function WebsiteUsersTable() {
   const modal = useOverlayState();
   const importModal = useOverlayState();
   const [editing, setEditing] = useState<Credential | null>(null);
+  const [prefill, setPrefill] = useState<Credential | null>(null);
   const [nameFilter, setNameFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -232,11 +233,26 @@ export function WebsiteUsersTable() {
 
   const openAdd = () => {
     setEditing(null);
+    setPrefill(null);
     modal.open();
   };
 
   const openEdit = (cred: Credential) => {
     setEditing(cred);
+    setPrefill(null);
+    modal.open();
+  };
+
+  // "Add" on an unmanaged WordPress-user row: create a new credential with the
+  // site + user context prefilled (password stays blank for the admin to fill).
+  const openAddFromWp = (row: Credential) => {
+    setEditing(null);
+    setPrefill({
+      ...row,
+      id: "",
+      unmanaged: undefined,
+      note: row.wpRole ? `WordPress role: ${row.wpRole}` : undefined,
+    });
     modal.open();
   };
 
@@ -260,8 +276,19 @@ export function WebsiteUsersTable() {
         : await createWebsiteCredential(payload);
 
       setCredentials((prev) => {
-        const exists = prev.some((c) => c.id === saved.id);
-        return exists ? prev.map((c) => (c.id === saved.id ? saved : c)) : [saved, ...prev];
+        // Drop any unmanaged WP row this credential now covers (same site + login).
+        const withoutCovered = prev.filter(
+          (c) =>
+            !(
+              c.unmanaged &&
+              c.websiteId === saved.websiteId &&
+              c.username.toLowerCase() === saved.username.toLowerCase()
+            )
+        );
+        const exists = withoutCovered.some((c) => c.id === saved.id);
+        return exists
+          ? withoutCovered.map((c) => (c.id === saved.id ? saved : c))
+          : [saved, ...withoutCovered];
       });
       notify.success(editing ? "Credential updated" : "Credential added", {
         description: saved.name,
@@ -424,9 +451,20 @@ export function WebsiteUsersTable() {
               )}
             >
               {filtered.map((c) => (
-                <TableRow key={c.id} id={c.id}>
+                <TableRow
+                  key={c.id}
+                  id={c.id}
+                  className={c.unmanaged ? "is-wp-unmanaged" : undefined}
+                >
                   <TableCell>
-                    <span className="font-medium text-gray-900">{c.name}</span>
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-gray-900">{c.name}</span>
+                      {c.unmanaged && (
+                        <Chip size="sm" variant="soft" color="warning">
+                          In WordPress · not added
+                        </Chip>
+                      )}
+                    </span>
                   </TableCell>
                   <TableCell>
                     {c.externalSite ? (
@@ -461,21 +499,60 @@ export function WebsiteUsersTable() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <span className="text-sm text-gray-700">
-                      {formatDate(c.createdAt)}
-                    </span>
+                    {c.unmanaged ? (
+                      <span className="text-gray-400">—</span>
+                    ) : (
+                      <span className="text-sm text-gray-700">
+                        {formatDate(c.createdAt)}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>
-                    <PasswordHealth updatedAt={c.passwordUpdatedAt} />
+                    {c.unmanaged ? (
+                      <span className="text-gray-400">—</span>
+                    ) : (
+                      <PasswordHealth updatedAt={c.passwordUpdatedAt} />
+                    )}
                   </TableCell>
                   <TableCell>
-                    {c.note ? (
+                    {c.unmanaged && c.wpRole ? (
+                      <span className="text-sm text-gray-600 capitalize">{c.wpRole}</span>
+                    ) : c.note ? (
                       <span className="text-sm text-gray-600">{c.note}</span>
                     ) : (
                       <span className="text-gray-400">—</span>
                     )}
                   </TableCell>
                   <TableCell>
+                    {c.unmanaged ? (
+                      <div className="flex items-center gap-2">
+                        {credentialSiteHref(c) && (
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            variant="ghost"
+                            aria-label={`Open website for ${c.name} in a new tab`}
+                            onPress={() =>
+                              window.open(
+                                credentialSiteHref(c)!,
+                                "_blank",
+                                "noopener,noreferrer"
+                              )
+                            }
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onPress={() => openAddFromWp(c)}
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add
+                        </Button>
+                      </div>
+                    ) : (
                     <div className="flex items-center gap-2">
                       {credentialSiteHref(c) && (
                         <Button
@@ -519,6 +596,7 @@ export function WebsiteUsersTable() {
                         <Trash2 className="h-4 w-4 text-red-600" />
                       </Button>
                     </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -528,9 +606,10 @@ export function WebsiteUsersTable() {
       </div>
 
       <CredentialModal
-        key={`${editing?.id ?? "new"}:${modal.isOpen ? "open" : "closed"}`}
+        key={`${editing?.id ?? prefill?.username ?? "new"}:${modal.isOpen ? "open" : "closed"}`}
         state={modal}
         credential={editing}
+        prefill={prefill}
         options={options}
         onSave={handleSave}
       />

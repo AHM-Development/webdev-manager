@@ -122,7 +122,105 @@ async function listCredentials(filters, user) {
     params.environment = normalizeEnvironment(filters.environment);
   }
 
-  return queryCredentials(where.join(' AND '), params, false);
+  var credentials = await queryCredentials(where.join(' AND '), params, false);
+  var unmanaged = await unmanagedWpUserRows(filters, user);
+  return credentials.concat(unmanaged);
+}
+
+function safeJson(value) {
+  if (!value) return null;
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch (err) {
+    return null;
+  }
+}
+
+// WordPress users that exist on a connected site (from the AHM Core snapshot)
+// but have no matching credential yet. Surfaced as read-only "unmanaged" rows
+// so an admin can add them in one click. Superadmin-only: coverage detection
+// needs the full credential set, which non-super-admins are not allowed to see,
+// and the roster shouldn't leak to them.
+async function unmanagedWpUserRows(filters, user) {
+  if (!user || user.role !== 'superadmin') return [];
+
+  // Unmanaged rows describe Live-site users; hide them when the list is
+  // narrowed to Staging only.
+  if (
+    filters.environment && filters.environment !== 'all' &&
+    normalizeEnvironment(filters.environment) === 'Staging'
+  ) {
+    return [];
+  }
+
+  var where = ['wpc.snapshot IS NOT NULL', 'p.deleted_at IS NULL'];
+  var params = {};
+  if (filters.projectId && filters.projectId !== 'all') {
+    where.push('pw.project_id = :projectId');
+    params.projectId = filters.projectId;
+  }
+
+  var sites = await db.query(
+    `SELECT pw.id AS website_id, pw.name AS website_name, pw.url AS website_url,
+            pw.project_id, p.client_name, wpc.snapshot
+     FROM wordpress_connections wpc
+     JOIN project_websites pw ON pw.id = wpc.website_id
+     JOIN projects p ON p.id = pw.project_id
+     WHERE ` + where.join(' AND '),
+    params
+  );
+  if (!sites.length) return [];
+
+  // Existing credential usernames per website (lowercased), to detect coverage.
+  // Fetched in one pass — prepared statements can't expand an IN (:ids) array.
+  var credRows = await db.query(
+    `SELECT website_id, LOWER(username) AS username
+     FROM website_credentials
+     WHERE deleted_at IS NULL AND website_id IS NOT NULL`
+  );
+  var coverage = {};
+  credRows.forEach(function(row) {
+    var key = String(row.website_id);
+    (coverage[key] = coverage[key] || {})[row.username] = true;
+  });
+
+  var q = filters.q ? String(filters.q).toLowerCase() : '';
+  var rows = [];
+  sites.forEach(function(site) {
+    var snapshot = safeJson(site.snapshot);
+    var wpUsers = snapshot && Array.isArray(snapshot.users) ? snapshot.users : [];
+    var covered = coverage[String(site.website_id)] || {};
+    wpUsers.forEach(function(wpUser) {
+      var email = String(wpUser.email || '').trim();
+      var emailKey = email.toLowerCase();
+      // Covered when a credential's username already matches this WP email.
+      if (emailKey && covered[emailKey]) return;
+      var name = wpUser.name || email || 'WordPress user';
+      var role = wpUser.role || '';
+      if (q) {
+        var hay = [name, email, role, site.client_name, site.website_name, site.website_url]
+          .join(' ')
+          .toLowerCase();
+        if (hay.indexOf(q) === -1) return;
+      }
+      rows.push({
+        id: 'wp:' + site.website_id + ':' + (wpUser.id || emailKey || name),
+        unmanaged: true,
+        name: name,
+        wpRole: role,
+        wpEmail: email || undefined,
+        projectId: String(site.project_id),
+        projectName: site.client_name,
+        websiteId: String(site.website_id),
+        websiteName: site.website_name,
+        websiteUrl: site.website_url,
+        environment: 'Live',
+        username: email,
+      });
+    });
+  });
+  return rows;
 }
 
 async function getCredential(credentialId, includePassword) {

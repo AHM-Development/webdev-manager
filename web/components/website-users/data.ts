@@ -18,6 +18,11 @@ export type Credential = {
   createdAt: string;
   passwordUpdatedAt: string;
   note?: string;
+  // Set on synthetic rows for WordPress users that exist on a connected site
+  // but have no credential yet. These are read-only prompts to add one.
+  unmanaged?: boolean;
+  wpRole?: string;
+  wpEmail?: string;
 };
 
 export const seedCredentials: Credential[] = [

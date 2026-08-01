@@ -137,6 +137,19 @@ textarea {
   box-shadow: inset 3px 0 0 0 #f59e0b;
 }
 
+/* Unmanaged WordPress-user rows (on the site but not added as a credential):
+   yellow tint + yellow left accent. Higher specificity beats the white rule. */
+.app-table-shell tr.is-wp-unmanaged td,
+.app-table-shell tr.is-wp-unmanaged th,
+.app-table-shell .table__row.is-wp-unmanaged .table__cell {
+  background: #fef9c3 !important;
+  background-color: #fef9c3 !important;
+}
+.app-table-shell tr.is-wp-unmanaged td:first-child,
+.app-table-shell .table__row.is-wp-unmanaged .table__cell:first-child {
+  box-shadow: inset 3px 0 0 0 #ca8a04;
+}
+
 .app-table-shell .table__column {
   color: #64748b;
   font-size: 0.72rem;

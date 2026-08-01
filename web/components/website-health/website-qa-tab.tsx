@@ -1,7 +1,6 @@
 "use client";
 
 import { Chip } from "@heroui/react";
-import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
@@ -57,55 +56,30 @@ function applySampleFindings(data: WebsiteQaResults): WebsiteQaResults {
   return { groups, summary };
 }
 
-function DetailBlock({ label, value }: { label: string; value: string }) {
-  if (!value) return null;
-  return (
-    <div>
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        {label}
-      </p>
-      <p className="mt-0.5 whitespace-pre-wrap text-sm text-slate-600">{value}</p>
-    </div>
-  );
-}
-
 function QaItemRow({ item }: { item: WebsiteQaItem }) {
-  const [open, setOpen] = useState(false);
-  const hasDetails = !!(item.detail || item.checks || item.fix || item.note);
-  // Fall back to `note` for the "why" block when `detail` wasn't provided.
-  const why = item.detail || item.note;
+  // Match the Website Checklist row: title + status, then (for warning/fail) the
+  // description and a "Possible fix:" line inline.
+  const description = item.detail || item.note;
+  const showDetails =
+    (item.status === "fail" || item.status === "warning") && (description || item.fix);
 
   return (
-    <li>
-      <div className="flex items-start justify-between gap-3 px-3 py-2.5">
-        <button
-          type="button"
-          onClick={() => hasDetails && setOpen((prev) => !prev)}
-          className={`flex min-w-0 flex-1 items-start gap-2 text-left ${
-            hasDetails ? "cursor-pointer" : "cursor-default"
-          }`}
-          aria-expanded={hasDetails ? open : undefined}
-        >
-          {hasDetails ? (
-            <ChevronDown
-              className={`mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition-transform ${
-                open ? "rotate-180" : ""
-              }`}
-            />
-          ) : (
-            <span className="mt-0.5 h-4 w-4 shrink-0" />
-          )}
-          <span className="min-w-0 text-sm text-slate-700">{item.text}</span>
-        </button>
-        <div className="shrink-0 pt-0.5">
+    <li className="px-3 py-2.5">
+      <div className="flex items-start justify-between gap-3">
+        <span className="min-w-0 text-sm text-slate-700">{item.text}</span>
+        <div className="shrink-0">
           <StatusChip status={item.status} />
         </div>
       </div>
-      {hasDetails && open && (
-        <div className="space-y-3 border-t border-slate-100 bg-slate-50/60 px-3 py-3 pl-9">
-          <DetailBlock label="Why" value={why} />
-          <DetailBlock label="Checks done" value={item.checks} />
-          <DetailBlock label="Possible fix" value={item.fix} />
+      {showDetails && (
+        <div className="mt-1.5 space-y-1 border-l-2 border-slate-200 pl-3 text-sm">
+          {description && <p className="text-slate-600">{description}</p>}
+          {item.fix && (
+            <p className="text-slate-600">
+              <span className="font-semibold text-slate-700">Possible fix: </span>
+              {item.fix}
+            </p>
+          )}
         </div>
       )}
     </li>

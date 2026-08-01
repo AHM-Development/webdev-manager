@@ -313,13 +313,16 @@ function PriorityProjectTable({
                   <ProjectGroupSelect project={project} onChange={onChangeGroup} />
                 </TableCell>
                 <TableCell>
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex w-full min-w-0 items-center gap-2 overflow-hidden">
                     <Avatar className="h-8 w-8 shrink-0 text-xs">
                       <AvatarFallback>
                         {initials(project.assignee.name)}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="min-w-0 truncate" title={project.assignee.name}>
+                    <span
+                      className="min-w-0 flex-1 truncate"
+                      title={project.assignee.name}
+                    >
                       {project.assignee.name}
                     </span>
                   </div>

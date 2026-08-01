@@ -41,7 +41,7 @@ import { SearchableFilter } from "@/components/ui/searchable-filter";
 
 import { CredentialModal } from "./credential-modal";
 import { ImportCredentialsModal } from "./import-credentials-modal";
-import { sampleCredentials, type Credential } from "./data";
+import { type Credential } from "./data";
 
 const emptyOptions: WebsiteCredentialOptions = {
   projects: [],
@@ -161,9 +161,7 @@ export function WebsiteUsersTable() {
         listWebsiteCredentials(),
         getWebsiteCredentialOptions(),
       ]);
-      // Demo fallback: show sample rows (incl. unmanaged WP users) when there's
-      // no real data yet, so the table can be previewed. Remove once live.
-      setCredentials(credentialRows.length ? credentialRows : sampleCredentials);
+      setCredentials(credentialRows);
       setOptions(optionRows);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to load credentials.";

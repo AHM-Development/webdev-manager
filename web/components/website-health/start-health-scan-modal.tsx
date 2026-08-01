@@ -36,16 +36,12 @@ import { startHealthScanSchema, type StartHealthScanValues } from "./schema";
 
 const CHECK_LABELS: Record<HealthCheck, string> = {
   lighthouse: "Lighthouse",
-  technical_seo: "Technical SEO",
-  design_qa: "Design QA",
   website_checklists: "Website checklists",
   forms: "Forms",
 };
 
 const CHECK_HINTS: Record<HealthCheck, string> = {
   lighthouse: "Needs a PageSpeed API key",
-  technical_seo: "Configure AI in Settings",
-  design_qa: "Configure AI in Settings",
   website_checklists: "Connect WordPress first",
   forms: "Connect WordPress first",
 };
@@ -87,8 +83,6 @@ export function StartHealthScanModal({
       sitemapUrl: "",
       checks: {
         lighthouse: false,
-        technical_seo: false,
-        design_qa: false,
         website_checklists: false,
         forms: false,
       },
@@ -102,8 +96,6 @@ export function StartHealthScanModal({
   const availability = useMemo<Record<HealthCheck, boolean>>(
     () => ({
       lighthouse: !!capabilities?.lighthouse,
-      technical_seo: !!capabilities?.ai,
-      design_qa: !!capabilities?.ai,
       // Selectable regardless of connector: without AHM Core the scan runs the
       // check but reports it was skipped, instead of blocking selection.
       website_checklists: true,

@@ -311,7 +311,7 @@ async function processScan(scanId) {
     if (!Array.isArray(essentialPlugins) || !essentialPlugins.length) essentialPlugins = health.DEFAULT_ESSENTIAL_PLUGINS;
     var stalenessDays = website.content_staleness_days != null ? Number(website.content_staleness_days) : health.DEFAULT_CONTENT_STALENESS_DAYS;
     var maxPages = Math.min(env.websiteHealth.maxPages, Number(website.max_pages || env.websiteHealth.maxPages));
-    var checks = health.parseJson(scan.selected_checks, null) || ['lighthouse', 'technical_seo', 'design_qa', 'website_checklists'];
+    var checks = health.parseJson(scan.selected_checks, null) || ['lighthouse', 'website_checklists', 'forms'];
     var runLighthouse = checks.indexOf('lighthouse') !== -1;
     await update(scanId, 'crawling', 5);
     var browserPages = await browserScanner.scanWebsite(scanId, website.url, maxPages, async function(page, count) {

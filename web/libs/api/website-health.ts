@@ -30,20 +30,14 @@ export type HealthScan = {
   completedAt: string | null;
 };
 
-/** The five selectable scan checks. "website_checklists" covers WordPress
+/** The selectable scan checks. "website_checklists" covers WordPress
  *  maintenance and security; "forms" audits WP form plugins (both need the
- *  paired connector). */
-export type HealthCheck =
-  | "lighthouse"
-  | "technical_seo"
-  | "design_qa"
-  | "website_checklists"
-  | "forms";
+ *  paired connector). Technical SEO and Design QA are NOT scanned here — those
+ *  make up "Website QA", which an external Claude runs and pushes back in. */
+export type HealthCheck = "lighthouse" | "website_checklists" | "forms";
 
 export const HEALTH_CHECKS: HealthCheck[] = [
   "lighthouse",
-  "technical_seo",
-  "design_qa",
   "website_checklists",
   "forms",
 ];

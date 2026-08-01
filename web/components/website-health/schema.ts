@@ -3,8 +3,6 @@ import { z } from "zod";
 export const healthChecksSchema = z
   .object({
     lighthouse: z.boolean(),
-    technical_seo: z.boolean(),
-    design_qa: z.boolean(),
     website_checklists: z.boolean(),
     forms: z.boolean(),
   })

@@ -47,9 +47,9 @@ function applySampleFindings(data: WebsiteQaResults): WebsiteQaResults {
         ...item,
         status,
         note: "",
-        detail: `Sample: "${item.text}" was flagged during the QA pass.`,
-        checks: "Sample: evaluated the relevant pages/elements against this criterion.",
-        fix: "Sample: correct the issue on the site and re-run the QA scan.",
+        detail: `"${item.text}" was flagged during the QA pass.`,
+        checks: "Evaluated the relevant pages/elements against this criterion.",
+        fix: "Correct the issue on the site and re-run the QA scan.",
       };
     }),
   }));

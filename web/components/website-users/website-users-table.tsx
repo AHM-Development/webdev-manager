@@ -459,25 +459,35 @@ export function WebsiteUsersTable() {
                   className={c.unmanaged ? "is-wp-unmanaged" : undefined}
                 >
                   <TableCell>
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-gray-900">{c.name}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span
+                        className="min-w-0 truncate font-medium text-gray-900"
+                        title={c.name}
+                      >
+                        {c.name}
+                      </span>
                       {c.unmanaged && (
-                        <Chip size="sm" variant="soft" color="warning">
-                          In WordPress · not added
+                        <Chip size="sm" variant="soft" color="warning" className="shrink-0">
+                          Not added
                         </Chip>
                       )}
                     </span>
                   </TableCell>
                   <TableCell>
                     {c.externalSite ? (
-                      <span className="flex items-center gap-2">
-                        <span className="text-gray-700">{c.externalSite}</span>
-                        <Chip size="sm" variant="soft" color="accent">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="min-w-0 truncate text-gray-700" title={c.externalSite}>
+                          {c.externalSite}
+                        </span>
+                        <Chip size="sm" variant="soft" color="accent" className="shrink-0">
                           External
                         </Chip>
                       </span>
                     ) : (
-                      <span className="text-gray-700">
+                      <span
+                        className="block truncate text-gray-700"
+                        title={credentialProjectName(c, options)}
+                      >
                         {credentialProjectName(c, options)}
                       </span>
                     )}
@@ -496,7 +506,10 @@ export function WebsiteUsersTable() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <span className="font-mono text-sm text-gray-800">
+                    <span
+                      className="block truncate font-mono text-sm text-gray-800"
+                      title={c.username}
+                    >
                       {c.username}
                     </span>
                   </TableCell>
@@ -518,9 +531,16 @@ export function WebsiteUsersTable() {
                   </TableCell>
                   <TableCell>
                     {c.unmanaged && c.wpRole ? (
-                      <span className="text-sm text-gray-600 capitalize">{c.wpRole}</span>
+                      <span
+                        className="block truncate text-sm capitalize text-gray-600"
+                        title={c.wpRole}
+                      >
+                        {c.wpRole}
+                      </span>
                     ) : c.note ? (
-                      <span className="text-sm text-gray-600">{c.note}</span>
+                      <span className="block truncate text-sm text-gray-600" title={c.note}>
+                        {c.note}
+                      </span>
                     ) : (
                       <span className="text-gray-400">—</span>
                     )}

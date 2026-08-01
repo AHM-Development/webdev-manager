@@ -30,32 +30,6 @@ function StatusChip({ status }: { status: WebsiteQaStatus | null }) {
   );
 }
 
-// Preview overlay: when no findings have been pushed yet, populate a realistic
-// mix of pass/warning/fail with sample details so the display can be reviewed.
-function applySampleFindings(data: WebsiteQaResults): WebsiteQaResults {
-  const summary = { pass: 0, fail: 0, warning: 0, na: 0, notChecked: 0, total: data.summary.total };
-  const groups = data.groups.map((group) => ({
-    ...group,
-    items: group.items.map((item, index) => {
-      const status: WebsiteQaStatus =
-        index % 5 === 3 ? "fail" : index % 5 === 1 ? "warning" : "pass";
-      summary[status] += 1;
-      if (status === "pass") {
-        return { ...item, status, note: "", detail: "", checks: "", fix: "" };
-      }
-      return {
-        ...item,
-        status,
-        note: "",
-        detail: `"${item.text}" was flagged during the QA pass.`,
-        checks: "Evaluated the relevant pages/elements against this criterion.",
-        fix: "Correct the issue on the site and re-run the QA scan.",
-      };
-    }),
-  }));
-  return { groups, summary };
-}
-
 function QaItemRow({ item }: { item: WebsiteQaItem }) {
   // Match the Website Checklist row: title + status, then (for warning/fail) the
   // description and a "Possible fix:" line inline.
@@ -118,20 +92,11 @@ export function WebsiteQaTab({ websiteId }: { websiteId?: string | null }) {
     );
   }
 
-  // No findings pushed yet → show a sample-populated preview.
-  const isSample = data.summary.notChecked === data.summary.total;
-  const view = isSample ? applySampleFindings(data) : data;
-  const { summary } = view;
+  const { summary } = data;
   const checked = summary.total - summary.notChecked;
 
   return (
     <div className="space-y-6">
-      {isSample && (
-        <Chip size="sm" variant="soft" color="warning">
-          Preview — sample data (populates once the AI pushes QA findings)
-        </Chip>
-      )}
-
       {/* Summary */}
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Chip size="sm" variant="soft" color="success">{summary.pass} pass</Chip>
@@ -147,7 +112,7 @@ export function WebsiteQaTab({ websiteId }: { websiteId?: string | null }) {
       </div>
 
       {/* Grouped checklist */}
-      {view.groups.map((group) => (
+      {data.groups.map((group) => (
         <div key={group.id}>
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-900">{group.name}</h3>

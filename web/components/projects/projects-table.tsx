@@ -288,14 +288,16 @@ function PriorityProjectTable({
                 className="cursor-grab data-[dragging=true]:opacity-50"
               >
                 <TableCell>
-                  <span className="flex items-center gap-1.5 font-medium text-gray-900">
+                  <span className="flex min-w-0 items-center gap-1.5 font-medium text-gray-900">
                     {project.priority === "High" && (
                       <Star
                         className="h-3.5 w-3.5 shrink-0 fill-amber-500 text-amber-500"
                         aria-label="Priority client"
                       />
                     )}
-                    <span className="truncate">{project.clientName}</span>
+                    <span className="min-w-0 truncate" title={project.clientName}>
+                      {project.clientName}
+                    </span>
                   </span>
                 </TableCell>
                 <TableCell>
@@ -311,13 +313,13 @@ function PriorityProjectTable({
                   <ProjectGroupSelect project={project} onChange={onChangeGroup} />
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Avatar className="h-8 w-8 text-xs">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Avatar className="h-8 w-8 shrink-0 text-xs">
                       <AvatarFallback>
                         {initials(project.assignee.name)}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="whitespace-nowrap">
+                    <span className="min-w-0 truncate" title={project.assignee.name}>
                       {project.assignee.name}
                     </span>
                   </div>
@@ -365,12 +367,18 @@ function PriorityProjectTable({
                   <LinkCell href={project.figmaLink} label="View" />
                 </TableCell>
                 <TableCell>
-                  <span className="whitespace-nowrap text-gray-700">
+                  <span
+                    className="block truncate text-gray-700"
+                    title={project.domainManagement}
+                  >
                     {project.domainManagement}
                   </span>
                 </TableCell>
                 <TableCell>
-                  <span className="text-gray-700">
+                  <span
+                    className="block truncate text-gray-700"
+                    title={project.serverLocation}
+                  >
                     {project.serverLocation}
                   </span>
                 </TableCell>

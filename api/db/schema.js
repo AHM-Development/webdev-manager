@@ -259,6 +259,15 @@ async function ensureSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  // Per-website QA push token: an external Claude authenticates the Website QA
+  // results push with this token, which identifies the website (so findings
+  // can't land on the wrong client). Stored encrypted for re-copy + hashed for
+  // lookup on the public push route.
+  await alterIgnoreDuplicate('ALTER TABLE project_websites ADD COLUMN qa_push_token_enc TEXT NULL');
+  await alterIgnoreDuplicate('ALTER TABLE project_websites ADD COLUMN qa_push_token_hash CHAR(64) NULL');
+  await alterIgnoreDuplicate('ALTER TABLE project_websites ADD COLUMN qa_push_token_created_at DATETIME NULL');
+  await alterIgnoreDuplicate('ALTER TABLE project_websites ADD KEY project_websites_qa_token_idx (qa_push_token_hash)');
+
   await db.query(`
     CREATE TABLE IF NOT EXISTS tasks (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

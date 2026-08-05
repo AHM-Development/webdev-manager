@@ -6,6 +6,12 @@ var limits = require('../../middleware/rate-limit');
 var uploads = require('../../lib/uploads');
 
 var router = express.Router();
+
+// Public, token-authenticated Website QA push (the external Claude runner).
+// Defined BEFORE the auth gate below so it authenticates via its own bearer
+// token (which identifies the website) rather than a user session.
+router.post('/qa-results', limits.apiIpRateLimit, controller.submitQaResultsByToken);
+
 router.use(auth.requireAuth);
 router.use(auth.requireRoles(roles.ALL_ROLES));
 router.use(limits.apiUserRateLimit);
@@ -28,6 +34,11 @@ router.post('/websites/:websiteId/reset', auth.requireRoles(roles.MANAGER_ROLES)
 router.get('/websites/:websiteId/qa-results', controller.getQaResults);
 router.post('/websites/:websiteId/qa-results', auth.requireRoles(roles.WRITE_ROLES), controller.submitQaResults);
 router.delete('/websites/:websiteId/qa-results', auth.requireRoles(roles.WRITE_ROLES), controller.resetQaResults);
+
+// QA Runner: per-website push token + the copyable prompt (Super-Admin + Developer).
+router.get('/websites/:websiteId/qa-runner', auth.requireRoles(roles.WRITE_ROLES), controller.getQaRunner);
+router.post('/websites/:websiteId/qa-runner/token', auth.requireRoles(roles.WRITE_ROLES), controller.generateQaToken);
+router.delete('/websites/:websiteId/qa-runner/token', auth.requireRoles(roles.WRITE_ROLES), controller.revokeQaToken);
 
 router.get('/websites/:websiteId', controller.latest);
 router.get('/websites/:websiteId/history', controller.history);

@@ -16,6 +16,9 @@ let qaItems = [];
 let qaResults = [];
 let knownCriteria = []; // ids that pass the "criterion still exists" check
 let deletedScans = 0;
+let websiteTokenEnc = null; // encrypted token stored on the website row
+let aiPrompt = '';
+let pushTokenWebsiteId = null; // id resolved from a push-token hash lookup
 const calls = [];
 
 function inject(filename, exports) {
@@ -26,10 +29,20 @@ inject(dbPath, {
     calls.push({ sql, params });
     // websiteRow (404 gate) — distinctive trailing "WHERE pw.id = :websiteId LIMIT 1"
     if (/WHERE pw\.id = :websiteId LIMIT 1/.test(sql)) {
-      return websiteExists ? [{ id: params.websiteId, client_name: 'Acme', name: 'Site', url: 'https://x' }] : [];
+      return websiteExists
+        ? [{
+            id: params.websiteId, client_name: 'Acme', name: 'Site', url: 'https://x',
+            qa_push_token_enc: websiteTokenEnc, qa_push_token_created_at: websiteTokenEnc ? 'now' : null,
+          }]
+        : [];
     }
+    if (/SELECT ai_prompt FROM qa_criteria_settings/.test(sql)) return [{ ai_prompt: aiPrompt }];
     if (/FROM qa_criteria_groups/.test(sql)) return qaGroups;
     if (/FROM qa_criteria_items ORDER BY/.test(sql)) return qaItems;
+    if (/UPDATE project_websites\s+SET qa_push_token_enc/.test(sql)) return {};
+    if (/SELECT id FROM project_websites WHERE qa_push_token_hash/.test(sql)) {
+      return pushTokenWebsiteId ? [{ id: pushTokenWebsiteId }] : [];
+    }
     if (/FROM website_qa_results WHERE website_id/.test(sql)) return qaResults;
     if (/SELECT id FROM qa_criteria_items WHERE id = :id/.test(sql)) {
       return knownCriteria.indexOf(String(params.id)) !== -1 ? [{ id: params.id }] : [];
@@ -54,7 +67,12 @@ function reset() {
   qaResults = [];
   knownCriteria = [];
   deletedScans = 0;
+  websiteTokenEnc = null;
+  aiPrompt = '';
+  pushTokenWebsiteId = null;
 }
+
+const crypto = require('../website-users/crypto');
 
 // ---- resetWebsite ----
 test('resetWebsite deletes the website scans and reports the count', async () => {
@@ -185,4 +203,68 @@ test('list with scanStatus=unscanned filters to websites with no completed scan'
     (c) => /FROM project_websites/.test(c.sql) && /NOT EXISTS \(SELECT 1 FROM website_health_scans/.test(c.sql)
   );
   assert.ok(filtered, 'rows query includes the NOT EXISTS clause');
+});
+
+// ---- QA push token + runner prompt ----
+test('regenerateQaPushToken stores an encrypted + hashed qapush_ token', async () => {
+  reset();
+  const out = await service.regenerateQaPushToken('42');
+  const update = calls.find((c) => /UPDATE project_websites\s+SET qa_push_token_enc/.test(c.sql));
+  assert.ok(update, 'issued the token UPDATE');
+  assert.ok(update.params.hash && update.params.hash.length === 64, 'stored a sha256 hash');
+  assert.notEqual(update.params.enc, out.token, 'stored value is encrypted, not the raw token');
+  // The generated token round-trips back through the runner and is a qapush_ token.
+  websiteTokenEnc = update.params.enc;
+  assert.match(crypto.decrypt(update.params.enc), /^qapush_/);
+});
+
+test('getQaRunner with a token builds a prompt containing the criteria + endpoint', async () => {
+  reset();
+  aiPrompt = 'Run the QA.';
+  qaGroups = [{ id: 1, name: 'Group A' }];
+  qaItems = [{ id: 77, group_id: 1, text: 'Has one H1' }];
+  websiteTokenEnc = crypto.encrypt('qapush_demotoken');
+
+  const runner = await service.getQaRunner('42');
+  assert.equal(runner.hasToken, true);
+  assert.equal(runner.token, 'qapush_demotoken');
+  assert.match(runner.prompt, /\[77\] Has one H1/);
+  assert.match(runner.prompt, /Bearer qapush_demotoken/);
+  assert.match(runner.prompt, /website-health\/qa-results/);
+});
+
+test('getQaRunner without a token returns no prompt', async () => {
+  reset();
+  const runner = await service.getQaRunner('42');
+  assert.equal(runner.hasToken, false);
+  assert.equal(runner.prompt, null);
+});
+
+test('revokeQaPushToken clears the token columns', async () => {
+  reset();
+  websiteTokenEnc = crypto.encrypt('qapush_x');
+  const out = await service.revokeQaPushToken('42');
+  assert.equal(out.hasToken, false);
+  const update = calls.find(
+    (c) => /UPDATE project_websites/.test(c.sql) && /qa_push_token_enc = NULL/.test(c.sql)
+  );
+  assert.ok(update, 'nulled the token columns');
+});
+
+test('resolveWebsiteIdByPushToken resolves a known token to its website', async () => {
+  reset();
+  pushTokenWebsiteId = '42';
+  const id = await service.resolveWebsiteIdByPushToken('qapush_abc');
+  assert.equal(id, '42');
+});
+
+test('resolveWebsiteIdByPushToken rejects a non-qapush token', async () => {
+  reset();
+  await assert.rejects(service.resolveWebsiteIdByPushToken('Bearer nope'), (err) => err.status === 401);
+});
+
+test('resolveWebsiteIdByPushToken rejects an unknown token', async () => {
+  reset();
+  pushTokenWebsiteId = null;
+  await assert.rejects(service.resolveWebsiteIdByPushToken('qapush_ghost'), (err) => err.status === 401);
 });

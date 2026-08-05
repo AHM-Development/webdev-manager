@@ -1,6 +1,7 @@
 var db = require('../../db/pool');
 var env = require('../../config/env');
 var security = require('../../lib/security');
+var qaCrypto = require('../website-users/crypto');
 var activity = require('../auth/activity.service');
 var checklists = require('./checklist.service');
 var urlSecurity = require('./url-security');
@@ -353,6 +354,120 @@ async function resetQaResults(websiteId) {
   return getQaResults(websiteId);
 }
 
+// ---- Website QA push token + copyable runner prompt ----
+var QA_PUSH_PREFIX = 'qapush_';
+
+function qaApiBase() {
+  return String(env.websiteHealth.publicApiUrl || '').replace(/\/+$/, '') + '/api/v1';
+}
+
+function qaPushEndpoint() {
+  return qaApiBase() + '/website-health/qa-results';
+}
+
+// Assemble the full, self-contained prompt an operator copies into Claude: the
+// configured QA instructions, the site under test, the current criteria (with
+// their numeric ids) grouped, and the exact push request carrying this site's
+// token. Regenerated from live criteria each time, so it never goes stale.
+async function buildQaRunnerPrompt(site, token) {
+  var groups = await db.query('SELECT id, name FROM qa_criteria_groups ORDER BY sort_order ASC, id ASC');
+  var items = await db.query('SELECT id, group_id, text FROM qa_criteria_items ORDER BY sort_order ASC, id ASC');
+  var settingsRows = await db.query('SELECT ai_prompt FROM qa_criteria_settings WHERE id = 1');
+  var intro = (settingsRows[0] && settingsRows[0].ai_prompt && String(settingsRows[0].ai_prompt).trim())
+    || 'You are running a website QA review. Review the live website against the criteria below and judge each one.';
+
+  var byGroup = {};
+  items.forEach(function(item) {
+    (byGroup[String(item.group_id)] = byGroup[String(item.group_id)] || []).push(item);
+  });
+
+  var lines = [];
+  lines.push(intro.trim());
+  lines.push('');
+  lines.push('SITE UNDER TEST');
+  lines.push('- Client: ' + (site.client_name || 'Unknown'));
+  lines.push('- Website: ' + (site.name || '') + ' (' + (site.url || '') + ')');
+  lines.push('');
+  lines.push('For every criterion decide a status of pass | fail | warning | na. For any');
+  lines.push('fail or warning, include a short `detail` (what is wrong) and a `fix` (how to');
+  lines.push('resolve it). Omit `detail`/`fix` for pass and na.');
+  lines.push('');
+  lines.push('CRITERIA (use the numeric id in [brackets]):');
+  groups.forEach(function(group) {
+    var groupItems = byGroup[String(group.id)] || [];
+    if (!groupItems.length) return;
+    lines.push('');
+    lines.push(group.name);
+    groupItems.forEach(function(item) {
+      lines.push('  [' + item.id + '] ' + item.text);
+    });
+  });
+  lines.push('');
+  lines.push('When finished, push ALL results in a single request:');
+  lines.push('');
+  lines.push('curl -X POST ' + qaPushEndpoint() + ' \\');
+  lines.push('  -H "Authorization: Bearer ' + token + '" \\');
+  lines.push('  -H "Content-Type: application/json" \\');
+  lines.push('  -d \'{"results":[');
+  lines.push('        {"criterionId":"<id>","status":"pass"},');
+  lines.push('        {"criterionId":"<id>","status":"fail","detail":"…","fix":"…"}');
+  lines.push('      ]}\'');
+  lines.push('');
+  lines.push('Rules: send each criterion id at most once; status must be pass|fail|warning|na;');
+  lines.push('detail+fix are required for fail/warning and ignored for pass/na. The token');
+  lines.push('already targets this exact website — do not add a client or website id.');
+  return lines.join('\n');
+}
+
+async function getQaRunner(websiteId) {
+  var site = await websiteRow(websiteId);
+  var token = site.qa_push_token_enc ? qaCrypto.decrypt(site.qa_push_token_enc) : '';
+  var hasToken = !!token;
+  return {
+    hasToken: hasToken,
+    token: hasToken ? token : null,
+    createdAt: site.qa_push_token_created_at || null,
+    endpoint: qaPushEndpoint(),
+    prompt: hasToken ? await buildQaRunnerPrompt(site, token) : null,
+  };
+}
+
+async function regenerateQaPushToken(websiteId) {
+  await websiteRow(websiteId);
+  var token = QA_PUSH_PREFIX + security.randomToken(30);
+  await db.query(
+    `UPDATE project_websites
+        SET qa_push_token_enc = :enc, qa_push_token_hash = :hash, qa_push_token_created_at = UTC_TIMESTAMP()
+      WHERE id = :websiteId`,
+    { enc: qaCrypto.encrypt(token), hash: security.sha256(token), websiteId: websiteId }
+  );
+  return getQaRunner(websiteId);
+}
+
+async function revokeQaPushToken(websiteId) {
+  await websiteRow(websiteId);
+  await db.query(
+    `UPDATE project_websites
+        SET qa_push_token_enc = NULL, qa_push_token_hash = NULL, qa_push_token_created_at = NULL
+      WHERE id = :websiteId`,
+    { websiteId: websiteId }
+  );
+  return { hasToken: false, token: null, createdAt: null, endpoint: qaPushEndpoint(), prompt: null };
+}
+
+// Resolve the website a QA push token belongs to (used by the public,
+// token-authenticated push route). Never leaks which part failed.
+async function resolveWebsiteIdByPushToken(token) {
+  var value = String(token || '');
+  if (value.indexOf(QA_PUSH_PREFIX) !== 0) fail(401, 'QA_TOKEN_INVALID', 'Invalid QA push token.');
+  var rows = await db.query(
+    'SELECT id FROM project_websites WHERE qa_push_token_hash = :hash LIMIT 1',
+    { hash: security.sha256(value) }
+  );
+  if (!rows[0]) fail(401, 'QA_TOKEN_INVALID', 'Invalid QA push token.');
+  return String(rows[0].id);
+}
+
 async function cancel(scanId, user, context) {
   var scan = await getScan(scanId);
   if (!['queued', 'running'].includes(scan.status)) fail(409, 'SCAN_NOT_ACTIVE', 'Only active scans can be cancelled.');
@@ -550,4 +665,4 @@ async function deleteDesignVerification(websiteId, pageKey) {
   return { deleted: true };
 }
 
-module.exports = { list: list, getLatest: getLatest, history: history, createScan: createScan, getScan: getScan, cancel: cancel, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, report: report, websiteRow: websiteRow, resetWebsite: resetWebsite, getQaResults: getQaResults, submitQaResults: submitQaResults, resetQaResults: resetQaResults, parseJson: parseJson, capabilities: capabilities, listFormVerifications: listFormVerifications, saveFormVerification: saveFormVerification, deleteFormVerification: deleteFormVerification, listDesignVerifications: listDesignVerifications, saveDesignVerification: saveDesignVerification, deleteDesignVerification: deleteDesignVerification, DEFAULT_ESSENTIAL_PLUGINS: DEFAULT_ESSENTIAL_PLUGINS, DEFAULT_CONTENT_STALENESS_DAYS: DEFAULT_CONTENT_STALENESS_DAYS };
+module.exports = { list: list, getLatest: getLatest, history: history, createScan: createScan, getScan: getScan, cancel: cancel, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, report: report, websiteRow: websiteRow, resetWebsite: resetWebsite, getQaResults: getQaResults, submitQaResults: submitQaResults, resetQaResults: resetQaResults, getQaRunner: getQaRunner, regenerateQaPushToken: regenerateQaPushToken, revokeQaPushToken: revokeQaPushToken, resolveWebsiteIdByPushToken: resolveWebsiteIdByPushToken, parseJson: parseJson, capabilities: capabilities, listFormVerifications: listFormVerifications, saveFormVerification: saveFormVerification, deleteFormVerification: deleteFormVerification, listDesignVerifications: listDesignVerifications, saveDesignVerification: saveDesignVerification, deleteDesignVerification: deleteDesignVerification, DEFAULT_ESSENTIAL_PLUGINS: DEFAULT_ESSENTIAL_PLUGINS, DEFAULT_CONTENT_STALENESS_DAYS: DEFAULT_CONTENT_STALENESS_DAYS };

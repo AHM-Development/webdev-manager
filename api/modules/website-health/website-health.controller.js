@@ -24,6 +24,19 @@ async function reset(req, res, next) { try { res.json(await service.resetWebsite
 async function getQaResults(req, res, next) { try { res.json(await service.getQaResults(req.params.websiteId)); } catch (err) { next(err); } }
 async function submitQaResults(req, res, next) { try { res.json(await service.submitQaResults(req.params.websiteId, req.body || {}, req.user)); } catch (err) { next(err); } }
 async function resetQaResults(req, res, next) { try { res.json(await service.resetQaResults(req.params.websiteId)); } catch (err) { next(err); } }
+async function getQaRunner(req, res, next) { try { res.json(await service.getQaRunner(req.params.websiteId)); } catch (err) { next(err); } }
+async function generateQaToken(req, res, next) { try { res.json(await service.regenerateQaPushToken(req.params.websiteId)); } catch (err) { next(err); } }
+async function revokeQaToken(req, res, next) { try { res.json(await service.revokeQaPushToken(req.params.websiteId)); } catch (err) { next(err); } }
+// Public, token-authenticated push used by the external QA runner. The bearer
+// token identifies the website, so no client/website id is accepted from the caller.
+async function submitQaResultsByToken(req, res, next) {
+  try {
+    var header = req.headers.authorization || '';
+    var match = header.match(/^Bearer\s+(.+)$/i);
+    var websiteId = await service.resolveWebsiteIdByPushToken(match ? match[1] : '');
+    res.json(await service.submitQaResults(websiteId, req.body || {}, null));
+  } catch (err) { next(err); }
+}
 async function retry(req, res, next) {
   try {
     var scan = await service.retry(req.params.scanId, req.user, context(req));
@@ -84,4 +97,4 @@ async function deleteDesignVerification(req, res, next) {
   try { res.json(await service.deleteDesignVerification(req.params.websiteId, req.params.pageKey)); } catch (err) { next(err); }
 }
 
-module.exports = { list: list, latest: latest, history: history, createScan: createScan, capabilities: capabilities, getScan: getScan, cancel: cancel, reset: reset, getQaResults: getQaResults, submitQaResults: submitQaResults, resetQaResults: resetQaResults, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, checklistList: checklistList, checklistGet: checklistGet, report: report, sendFormTest: sendFormTest, uploadEvidence: uploadEvidence, listFormVerifications: listFormVerifications, saveFormVerification: saveFormVerification, deleteFormVerification: deleteFormVerification, listDesignVerifications: listDesignVerifications, saveDesignVerification: saveDesignVerification, deleteDesignVerification: deleteDesignVerification };
+module.exports = { list: list, latest: latest, history: history, createScan: createScan, capabilities: capabilities, getScan: getScan, cancel: cancel, reset: reset, getQaResults: getQaResults, submitQaResults: submitQaResults, resetQaResults: resetQaResults, getQaRunner: getQaRunner, generateQaToken: generateQaToken, revokeQaToken: revokeQaToken, submitQaResultsByToken: submitQaResultsByToken, retry: retry, pages: pages, updateFinding: updateFinding, getProfile: getProfile, updateProfile: updateProfile, checklistList: checklistList, checklistGet: checklistGet, report: report, sendFormTest: sendFormTest, uploadEvidence: uploadEvidence, listFormVerifications: listFormVerifications, saveFormVerification: saveFormVerification, deleteFormVerification: deleteFormVerification, listDesignVerifications: listDesignVerifications, saveDesignVerification: saveDesignVerification, deleteDesignVerification: deleteDesignVerification };

@@ -131,6 +131,30 @@ export async function getWebsiteQaResults(websiteId: string) {
   return data;
 }
 
+// ---- QA Runner: per-website push token + copyable prompt ----
+export type QaRunner = {
+  hasToken: boolean;
+  token: string | null;
+  createdAt: string | null;
+  endpoint: string;
+  prompt: string | null;
+};
+
+export async function getQaRunner(websiteId: string) {
+  const { data } = await apiClient.get<QaRunner>(endpoints.websiteHealth.qaRunner(websiteId));
+  return data;
+}
+
+export async function generateQaToken(websiteId: string) {
+  const { data } = await apiClient.post<QaRunner>(endpoints.websiteHealth.qaToken(websiteId));
+  return data;
+}
+
+export async function revokeQaToken(websiteId: string) {
+  const { data } = await apiClient.delete<QaRunner>(endpoints.websiteHealth.qaToken(websiteId));
+  return data;
+}
+
 export async function getWebsiteHealth(websiteId: string) {
   const { data } = await apiClient.get<WebsiteHealthDetail>(endpoints.websiteHealth.website(websiteId));
   return data;

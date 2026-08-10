@@ -26,23 +26,34 @@ function finding(category, checkId, severity, title, detail, evidence, recommend
   };
 }
 
+// Site-wide response-header hardening. These headers are the same on every
+// page, so they are evaluated ONCE per scan (see securityHeaders) rather than
+// per page — otherwise every crawled page repeats the identical warnings.
+function securityHeaders(page) {
+  var output = [];
+  var headers = page.headers || {};
+  if (String(page.url || '').startsWith('https://') && !headers['strict-transport-security']) {
+    output.push(finding('security', 'security.hsts', 'warning', 'HSTS header is missing', 'The HTTPS response did not include Strict-Transport-Security.', page.url, 'Enable HSTS via server config, .htaccess/nginx, or a security plugin, after confirming all resources support HTTPS.'));
+  }
+  if (!headers['content-security-policy']) output.push(finding('security', 'security.csp', 'warning', 'Content Security Policy is missing', 'No Content-Security-Policy response header was captured.', page.url, 'Deploy a tested Content Security Policy appropriate for the website.'));
+  if (!headers['x-content-type-options']) output.push(finding('security', 'security.content-type-options', 'warning', 'MIME sniffing protection is missing', 'No X-Content-Type-Options response header was captured.', page.url, 'Set X-Content-Type-Options to nosniff (server config or a security plugin).'));
+  if (!headers['referrer-policy']) output.push(finding('security', 'security.referrer-policy', 'warning', 'Referrer Policy is missing', 'No Referrer-Policy response header was captured.', page.url, 'Set a privacy-appropriate Referrer-Policy.'));
+  if (!headers['content-security-policy'] && !headers['x-frame-options']) output.push(finding('security', 'security.frame-protection', 'warning', 'Frame protection is missing', 'Neither CSP frame-ancestors nor X-Frame-Options was captured.', page.url, 'Add frame-ancestors in CSP or an appropriate X-Frame-Options header.'));
+  return output;
+}
+
 function deterministic(page) {
   var output = [];
   var core = page.core || {};
-  var headers = page.headers || {};
   if (page.error) output.push(finding('security', 'page.load', 'critical', 'Page could not be loaded', page.error, page.requestedUrl, 'Check DNS, TLS, redirects, and server availability.'));
   // Design/layout findings now live in design-qa.service.js (Design QA step).
+  // Mixed content is genuinely per-page (each page loads different resources).
   if (String(page.url || '').startsWith('https://')) {
-    if (!headers['strict-transport-security']) output.push(finding('security', 'security.hsts', 'warning', 'HSTS header is missing', 'The HTTPS response did not include Strict-Transport-Security.', page.url, 'Enable HSTS after confirming that all site resources support HTTPS.'));
     var mixed = (core.images || []).map(function(item) { return item.src; })
       .concat((core.links || []).map(function(item) { return item.href; }))
       .filter(function(url) { return /^http:\/\//i.test(url); });
     if (mixed.length) output.push(finding('security', 'security.mixed-content', 'critical', 'HTTP resources found on an HTTPS page', mixed.length + ' insecure resource or navigation URLs were captured.', mixed.slice(0, 10).join('\n'), 'Replace HTTP URLs with HTTPS or relative URLs.'));
   }
-  if (!headers['content-security-policy']) output.push(finding('security', 'security.csp', 'warning', 'Content Security Policy is missing', 'No Content-Security-Policy response header was captured.', page.url, 'Deploy a tested Content Security Policy appropriate for the website.'));
-  if (!headers['x-content-type-options']) output.push(finding('security', 'security.content-type-options', 'warning', 'MIME sniffing protection is missing', 'No X-Content-Type-Options response header was captured.', page.url, 'Set X-Content-Type-Options to nosniff.'));
-  if (!headers['referrer-policy']) output.push(finding('security', 'security.referrer-policy', 'warning', 'Referrer Policy is missing', 'No Referrer-Policy response header was captured.', page.url, 'Set a privacy-appropriate Referrer-Policy.'));
-  if (!headers['content-security-policy'] && !headers['x-frame-options']) output.push(finding('security', 'security.frame-protection', 'warning', 'Frame protection is missing', 'Neither CSP frame-ancestors nor X-Frame-Options was captured.', page.url, 'Add frame-ancestors in CSP or an appropriate X-Frame-Options header.'));
   (core.forms || []).forEach(function(form) {
     var unnamed = form.fields.filter(function(field) { return !field.label; });
     if (unnamed.length) output.push(finding('forms', 'forms.accessible-labels', 'warning', 'Form fields are missing labels', unnamed.length + ' fields have no captured accessible label.', JSON.stringify(unnamed), 'Add visible labels or accurate accessible names.'));
@@ -205,4 +216,4 @@ async function review(page, identity, checks) {
   };
 }
 
-module.exports = { review: review, deterministic: deterministic };
+module.exports = { review: review, deterministic: deterministic, securityHeaders: securityHeaders };

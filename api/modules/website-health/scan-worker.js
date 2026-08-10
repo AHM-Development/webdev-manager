@@ -380,6 +380,16 @@ async function processScan(scanId) {
     var wpSnapshot = null;
     if (wantChecklists) {
       await update(scanId, 'wordpress', 90);
+      // Site-wide security-header hardening — evaluated ONCE on the homepage
+      // response (these headers are identical across pages), not per crawled
+      // page, so they no longer repeat once per page.
+      if (browserPages.length && !(await cancelled(scanId))) {
+        var headerFindings = review.securityHeaders(browserPages[0]);
+        if (headerFindings.length) {
+          await insertFindings(scanId, null, headerFindings);
+          allFindings.push.apply(allFindings, headerFindings);
+        }
+      }
       try {
         wpSnapshot = await connector.refreshSnapshot(website.id);
         var wpFindings = wordpressFindings(wpSnapshot, essentialPlugins, stalenessDays);

@@ -1510,6 +1510,7 @@ var QA_CRITERIA_SEED = [
     'Email address consistent on every page',
     'GMC/registration number consistent on every page',
     'Treatments/services list consistent across nav, pages, and summaries',
+    "Each treatment/service page's content is relevant and specific to that treatment (no generic, placeholder, or copied-from-another-treatment text)",
     'Fees/pricing info consistent across all pages',
     "Testimonials belong to this client's field (flags out-of-place/reused testimonials)",
     'No leftover text/data from another doctor/client/template (cross-contamination check)',

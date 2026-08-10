@@ -1,24 +1,84 @@
-# Deploying AHM Web Manager (VPS + nginx + PM2)
+# Deploying AHM Web Manager (two servers: API + Web)
 
-Backend (Express API) and frontend (Next.js) run as two Node processes on
-`127.0.0.1`; nginx terminates HTTPS and routes by subdomain:
+The API and the web app run on **two separate servers**. Each has its own
+nginx terminating HTTPS for its subdomain and reverse-proxying to a local Node
+process managed by PM2.
 
 ```
-app.example.com  →  127.0.0.1:3000   (Next.js)
-api.example.com  →  127.0.0.1:5000   (Express API)  → MySQL 8 + Redis (localhost)
+Web server                              API server (htz01)
+  app: webdevmanager.allied-health.co     api: webdevmanagerapi.allied-health.co
+  nginx → 127.0.0.1:3000 (Next.js)        nginx → 127.0.0.1:5000 (Express)
+  PM2 process: webdevmanager                              → MySQL 8 + Redis (localhost)
+  user: webdevmanager                     PM2 process: webdevmanagerapi
+  repo: <web clone>/web                   user: webdevmanagerapi
+                                          repo: /home/webdevmanagerapi/webdev-manager/api
 ```
 
-## 1. Prerequisites (Ubuntu)
+> ⚠️ **The PM2 process names are `webdevmanagerapi` (API) and `webdevmanager`
+> (web).** They were started manually with `pm2 start npm --name … -- start`,
+> **not** from `ecosystem.config.js` (which would name them `ahm-api`/`ahm-web`).
+> Always target the real names — `pm2 restart ahm-api` is a silent no-op here.
+
+> ⚠️ **A `git pull` alone changes nothing** — the running Node process keeps the
+> old code until you **restart** it. Redeploys MUST end with `pm2 restart`.
+
+---
+
+## Redeploy — the common case
+
+Because the two apps live on different servers, deploy each on its own box. Do
+whichever side(s) your change touches (API-only, web-only, or both).
+
+### API server (`webdevmanagerapi@htz01`)
+
+```bash
+cd /home/webdevmanagerapi/webdev-manager
+git status                       # confirm: on 'main', clean tree
+git pull origin main
+cd api && npm install --omit=dev && cd ..
+pm2 restart webdevmanagerapi     # REQUIRED — reloads the new code; runs ensureSchema on boot
+pm2 save
+pm2 logs webdevmanagerapi --lines 40   # confirm a clean boot (no schema errors); Ctrl-C to exit
+```
+
+Verify the API is serving current code (expect **HTTP 401 AUTH_REQUIRED**, not
+`Cannot GET`):
+
+```bash
+curl -i http://127.0.0.1:5000/api/v1/qa-criteria
+```
+
+### Web server (`webdevmanager`)
+
+`NEXT_PUBLIC_API_URL` is baked into the browser bundle at **build** time, so a
+web change requires a rebuild, then a restart:
+
+```bash
+cd <web clone>/webdev-manager            # e.g. /home/webdevmanager/webdev-manager
+git pull origin main
+cd web && npm install && npm run build && cd ..
+pm2 restart webdevmanager
+pm2 save
+```
+
+> `ensureSchema()` runs on every API boot and is idempotent — it creates any new
+> tables/columns and re-seeds versioned defaults (e.g. QA criteria). So a schema
+> change ships simply by restarting the API; no manual migration step.
+
+---
+
+## First-time setup
+
+### 1. Prerequisites
+
+**API server** (Ubuntu):
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs mysql-server redis-server nginx
+sudo apt install -y nodejs mysql-server redis-server nginx certbot python3-certbot-nginx
 sudo npm i -g pm2
-sudo apt install -y certbot python3-certbot-nginx
 sudo mysql_secure_installation
 ```
-
-Create the database and user that match `api/.env`:
 
 ```sql
 CREATE DATABASE ahm CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -27,22 +87,31 @@ GRANT ALL PRIVILEGES ON ahm.* TO 'ahm'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-## 2. DNS
-
-Point two `A` records at the VPS IP: `app.example.com` and `api.example.com`.
-
-## 3. Get the code + env
+**Web server** (Ubuntu): Node + nginx + certbot only (no MySQL/Redis).
 
 ```bash
-git clone <repo> /var/www/webdev-manager && cd /var/www/webdev-manager
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs nginx certbot python3-certbot-nginx
+sudo npm i -g pm2
 ```
 
-**`api/.env`** (production):
+### 2. DNS
+
+- `webdevmanager.allied-health.co`     → **web** server IP
+- `webdevmanagerapi.allied-health.co`  → **API** server IP
+
+### 3. Code + env
+
+Clone the repo on **each** server (the web server only needs `web/`, the API
+server only needs `api/`, but cloning the whole repo is simplest).
+
+**`api/.env`** (API server):
 
 ```ini
-NODE_ENV=production            # enforces strong secrets on boot
+NODE_ENV=production                                   # enforces strong secrets on boot
 PORT=5000
-CLIENT_URL=https://app.example.com      # CORS origin — must match exactly
+CLIENT_URL=https://webdevmanager.allied-health.co     # CORS origin — must match the web app exactly
+PUBLIC_API_URL=https://webdevmanagerapi.allied-health.co   # origin only, NO /api/v1 (used for pairing + QA push URLs)
 JWT_SECRET=<long random string>
 DB_HOST=127.0.0.1
 DB_NAME=ahm
@@ -50,77 +119,89 @@ DB_USER=ahm
 DB_PASSWORD=<strong-password>
 REDIS_URL=redis://127.0.0.1:6379
 REFRESH_COOKIE_SECURE=true
-REFRESH_COOKIE_SAME_SITE=lax            # see "Cookies" note below
+REFRESH_COOKIE_SAME_SITE=lax                          # see "Cookies" note below
 # SMTP_*, VIKTOR_* (VIKTOR_REDIRECT_URIS!), TIMEZONE, etc.
 ```
 
-**`web/.env.production`** — `NEXT_PUBLIC_API_URL` is baked into the browser
-bundle at build time, so it must be set **before** `npm run build`:
+**`web/.env.production`** (web server) — set **before** `npm run build`:
 
 ```ini
-NEXT_PUBLIC_API_URL=https://api.example.com/api/v1
+NEXT_PUBLIC_API_URL=https://webdevmanagerapi.allied-health.co/api/v1
 ```
 
-## 4. Install, build, run
+### 4. Install, build, start
+
+**API server:**
 
 ```bash
-# API
-cd api && npm ci --omit=dev && cd ..
-# Web (build needs the .env.production above)
-cd web && npm ci && npm run build && cd ..
-
-# Start both with PM2 (from the repo root)
-pm2 start ecosystem.config.js
+cd /home/webdevmanagerapi/webdev-manager/api
+npm install --omit=dev
+pm2 start npm --name webdevmanagerapi -- start   # runs `node ./bin/www` on PORT 5000
 pm2 save
-pm2 startup      # run the command it prints, so it survives reboots
+pm2 startup                                      # run the command it prints (survives reboots)
+npm run bootstrap:superadmin                     # create the first admin (first deploy only)
 ```
 
-The API creates/migrates all tables on first boot (`ensureSchema`). **Back up
-the DB first if it already has data.** Then create the first admin:
+**Web server:**
 
 ```bash
-cd api && npm run bootstrap:superadmin
+cd <web clone>/webdev-manager/web
+npm install && npm run build
+pm2 start npm --name webdevmanager -- start      # `next start` on PORT 3000
+pm2 save
+pm2 startup
 ```
 
-## 5. nginx + HTTPS
+> The API creates/migrates all tables on first boot (`ensureSchema`). **Back up
+> the DB first if it already has data.**
+
+### 5. nginx + HTTPS (per server)
+
+On each server, create an nginx site that proxies its subdomain to the local
+port, then issue a cert:
 
 ```bash
-sudo cp deploy/nginx-ahm.conf /etc/nginx/sites-available/ahm
-sudo ln -s /etc/nginx/sites-available/ahm /etc/nginx/sites-enabled/ahm
-# edit the file to your real subdomains first
+# API server: proxy webdevmanagerapi.allied-health.co → 127.0.0.1:5000
+# Web server: proxy webdevmanager.allied-health.co    → 127.0.0.1:3000
 sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d app.example.com -d api.example.com
+sudo certbot --nginx -d <that server's subdomain>
 ```
 
-Certbot adds the 443 blocks and HTTP→HTTPS redirects automatically.
+`deploy/nginx-ahm.conf` is a reference config (originally single-box); split it
+so each server has only its own `server` block.
 
-## 6. Cookies (the one gotcha)
+### 6. Cookies
 
-The refresh token is an httpOnly cookie set by the **API** domain. Because
-`app.` and `api.` share the registrable domain, they're *same-site*, so
-`SameSite=lax` + `Secure` works as configured. If you ever split the two onto
-**different registrable domains**, set `REFRESH_COOKIE_SAME_SITE=none` (keep
-`REFRESH_COOKIE_SECURE=true`) or logins won't persist.
+The refresh token is an httpOnly cookie set by the **API** subdomain. Because
+`webdevmanager.` and `webdevmanagerapi.` share the registrable domain
+(`allied-health.co`), they're *same-site*, so `SameSite=lax` + `Secure` works.
+If the two are ever moved to **different registrable domains**, set
+`REFRESH_COOKIE_SAME_SITE=none` (keep `REFRESH_COOKIE_SECURE=true`) or logins
+won't persist.
 
-## 7. Redeploy (after a `git pull`)
-
-```bash
-cd /var/www/webdev-manager && git pull
-cd api && npm ci --omit=dev && cd ..
-cd web && npm ci && npm run build && cd ..
-pm2 reload ecosystem.config.js
-```
+---
 
 ## Ops cheatsheet
 
 ```bash
-pm2 status                 # both processes
-pm2 logs ahm-api           # API logs (watch first boot for schema errors)
-pm2 logs ahm-web           # web logs
-pm2 reload ahm-api         # zero-downtime restart after an env change
+# API server
+pm2 status
+pm2 logs webdevmanagerapi --lines 50     # watch boot for schema errors
+pm2 restart webdevmanagerapi             # reload code / env
+curl -i http://127.0.0.1:5000/api/v1/qa-criteria   # 401 = healthy; "Cannot GET" = stale/route missing
+
+# Web server
+pm2 logs webdevmanager --lines 50
+pm2 restart webdevmanager
 ```
+
+**Only ever run ONE process per app.** If `pm2 list` shows a duplicate
+`webdevmanagerapi` (e.g. one `errored`/crash-looping from the wrong cwd),
+delete it: `pm2 delete <id> && pm2 save`. A duplicate started from the home dir
+crash-loops with `ENOENT … package.json` and just spams the logs.
 
 ## Firewall
 
-Allow only `80`, `443`, and SSH. Keep `3000`, `5000`, MySQL, and Redis bound to
-`127.0.0.1` — the PM2 processes already listen locally; don't expose them.
+Per server, allow only `80`, `443`, and SSH. Keep the app ports (`3000` on web,
+`5000` on API) and MySQL/Redis bound to `127.0.0.1` — nginx proxies locally;
+don't expose them.

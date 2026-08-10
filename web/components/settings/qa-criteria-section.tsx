@@ -2,15 +2,17 @@
 
 import { Button } from "@heroui/react";
 import {
+  AlertTriangle,
   Copy,
   FileText,
   ListChecks,
   Loader2,
   Plus,
+  RefreshCw,
   Trash2,
   Upload,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { assetUrl } from "@/libs/api/client";
 import {
@@ -73,6 +75,8 @@ export function QaCriteriaSection() {
   const [newGroup, setNewGroup] = useState("");
   const [newItem, setNewItem] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const apply = (next: QaCriteriaConfig) => {
@@ -80,11 +84,21 @@ export function QaCriteriaSection() {
     setPrompt(next.prompt);
   };
 
-  useEffect(() => {
-    getQaCriteria()
-      .then(apply)
-      .catch(() => notify.error("Couldn't load QA criteria"));
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      apply(await getQaCriteria());
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Couldn't load QA criteria.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const run = async (fn: () => Promise<QaCriteriaConfig>, errorMsg: string) => {
     setBusy(true);
@@ -144,8 +158,28 @@ export function QaCriteriaSection() {
         </div>
       </div>
 
-      {!config ? (
-        <p className="text-sm text-slate-400">Loading…</p>
+      {loading ? (
+        <div className="space-y-3" aria-busy="true" aria-label="Loading QA criteria">
+          <div className="h-9 w-full animate-pulse rounded-md bg-slate-100" />
+          <div className="h-24 w-full animate-pulse rounded-md bg-slate-100" />
+          <div className="h-40 w-full animate-pulse rounded-md bg-slate-100" />
+        </div>
+      ) : loadError || !config ? (
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-rose-200 bg-rose-50/50 px-6 py-10 text-center">
+          <div className="grid h-11 w-11 place-items-center rounded-full bg-rose-100 text-rose-500">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-700">Couldn&apos;t load QA criteria</p>
+            <p className="mt-1 max-w-sm text-sm text-slate-500">
+              {loadError || "The criteria service didn't respond."}
+            </p>
+          </div>
+          <Button size="sm" variant="tertiary" isDisabled={loading} onPress={() => void load()}>
+            <RefreshCw className="h-4 w-4" />
+            Retry
+          </Button>
+        </div>
       ) : (
         <div className="space-y-6">
           {/* Reference: criteria API */}

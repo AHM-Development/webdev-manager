@@ -233,6 +233,16 @@ test('getQaRunner with a token builds a prompt containing the criteria + endpoin
   assert.match(runner.prompt, /website-health\/qa-results/);
 });
 
+test('getQaRunner substitutes template placeholders in the intro (no {{...}} leaks)', async () => {
+  reset();
+  aiPrompt = 'Review {{websiteUrl}} — fetch {{apiUrl}} with Bearer {{token}}.';
+  websiteTokenEnc = crypto.encrypt('qapush_demotoken');
+  const runner = await service.getQaRunner('42');
+  assert.doesNotMatch(runner.prompt, /\{\{/, 'no unreplaced placeholders remain');
+  assert.match(runner.prompt, /Review https:\/\/x/); // websiteUrl filled
+  assert.match(runner.prompt, /qapush_demotoken/);   // token filled
+});
+
 test('getQaRunner without a token returns no prompt', async () => {
   reset();
   const runner = await service.getQaRunner('42');

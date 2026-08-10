@@ -375,6 +375,13 @@ async function buildQaRunnerPrompt(site, token) {
   var settingsRows = await db.query('SELECT ai_prompt FROM qa_criteria_settings WHERE id = 1');
   var intro = (settingsRows[0] && settingsRows[0].ai_prompt && String(settingsRows[0].ai_prompt).trim())
     || 'You are running a website QA review. Review the live website against the criteria below and judge each one.';
+  // Substitute template placeholders so nothing dangles in the copied prompt.
+  // (The criteria are inlined below and results go to the push endpoint at the
+  // end, so the token here is this site's push token.)
+  intro = intro
+    .replace(/\{\{\s*websiteUrl\s*\}\}/g, site.url || '')
+    .replace(/\{\{\s*apiUrl\s*\}\}/g, qaApiBase() + '/qa-criteria')
+    .replace(/\{\{\s*token\s*\}\}/g, token);
 
   var byGroup = {};
   items.forEach(function(item) {

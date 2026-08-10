@@ -73,7 +73,6 @@ import {
   type SiteAudit,
 } from "./data";
 import { ScoreRing } from "./score-ring";
-import { WebsiteChecklistTab } from "./website-checklist-tab";
 import { WebsiteQaTab } from "./website-qa-tab";
 
 type TabId =
@@ -1430,7 +1429,7 @@ export function HealthDrawer({
     if (tab === "lighthouse") return <LighthouseTab audit={audit} />;
     if (tab === "website-qa") return <WebsiteQaTab websiteId={websiteId} />;
     if (tab === "forms") return <FormsTab audit={audit} websiteId={websiteId} />;
-    return <WebsiteChecklistTab />;
+    return <WordPressTab audit={audit} />;
   }, [audit, tab, websiteId]);
 
   return (

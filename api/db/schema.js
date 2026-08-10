@@ -1557,11 +1557,19 @@ var QA_OLD_DEFAULT_GROUPS = [
   'Technical SEO', 'Performance', 'Accessibility & Content', 'Forms', 'Security & Maintenance',
 ];
 
-var QA_DEFAULT_PROMPT =
+// The obsolete fetch-based default. The QA Runner now inlines the criteria and
+// carries a push token, so this "fetch from API" instruction is wrong (the push
+// token can't read the criteria endpoint). Kept only to migrate it if untouched.
+var QA_LEGACY_PROMPT =
   'You are a website QA assistant. Fetch the QA criteria from GET {{apiUrl}} ' +
   '(send header "Authorization: Bearer {{token}}"). For the website {{websiteUrl}}, ' +
   'check it against every criterion in each group, note pass/fail with evidence, ' +
   'then produce a report following the uploaded document template.';
+
+var QA_DEFAULT_PROMPT =
+  'You are a website QA assistant. Review the website {{websiteUrl}} against every ' +
+  'criterion in each group listed below and record a status (pass / fail / warning / na) ' +
+  'for each, with brief evidence. Then push all results using the request shown at the end.';
 
 async function insertQaSeed() {
   for (var g = 0; g < QA_CRITERIA_SEED.length; g += 1) {
@@ -1590,6 +1598,13 @@ async function seedQaCriteria() {
     settings = await db.query('SELECT seed_version FROM qa_criteria_settings WHERE id = 1');
   }
   var seedVersion = Number(settings[0].seed_version || 0);
+
+  // Migrate the obsolete fetch-based prompt to the inline one — only if it's
+  // still the untouched legacy default (never overwrite a customised prompt).
+  var promptRow = await db.query('SELECT ai_prompt FROM qa_criteria_settings WHERE id = 1');
+  if (promptRow[0] && String(promptRow[0].ai_prompt || '').trim() === QA_LEGACY_PROMPT.trim()) {
+    await db.query('UPDATE qa_criteria_settings SET ai_prompt = :prompt WHERE id = 1', { prompt: QA_DEFAULT_PROMPT });
+  }
 
   var groups = await db.query('SELECT name FROM qa_criteria_groups ORDER BY sort_order ASC, id ASC');
 

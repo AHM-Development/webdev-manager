@@ -109,3 +109,19 @@ test('createTask rejects an unknown requestor', async () => {
     (err) => err.code === 'REQUESTOR_UNKNOWN'
   );
 });
+
+test('changing status notifies the task creator (e.g. Viktor for tasks he created)', async () => {
+  reset();
+  taskRow = baseTask({ created_by: 42, status: 'Backlog' });
+  await service.updateStatus('7', 'Done', dev, ctx);
+  const note = dispatched.find((d) => d.input.type === 'task_status_changed');
+  assert.ok(note, 'creator was notified');
+  assert.equal(String(note.input.userId), '42');
+});
+
+test('changing status does not notify the creator when they made the change', async () => {
+  reset();
+  taskRow = baseTask({ created_by: 2, status: 'Backlog' }); // dev is id 2
+  await service.updateStatus('7', 'Done', dev, ctx);
+  assert.ok(!dispatched.some((d) => d.input.type === 'task_status_changed'));
+});

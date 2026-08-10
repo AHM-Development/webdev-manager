@@ -15,6 +15,8 @@ var env = require('../../config/env');
 var roles = require('../../config/roles');
 var projects = require('../projects/projects.service');
 var tasks = require('../tasks/tasks.service');
+var taskComments = require('../tasks/task-comments.service');
+var notifications = require('../notifications/notifications.service');
 var notes = require('../notes/notes.service');
 var issues = require('../issues/issues.service');
 var health = require('../website-health/website-health.service');
@@ -169,12 +171,46 @@ var ACTIONS = {
       (i.projectId ? ' (client ' + i.projectId + ')' : '') +
       (i.description ? ': "' + String(i.description).slice(0, 80) + '"' : '');
   }),
-  'tasks.update': write(STAFF_WRITE, function(u, a, c) { return tasks.updateTask(a.taskId, a.input || {}, u, c); },
-    function(a) { return 'Update task ' + a.taskId; }),
+  // Merge the provided fields over the current task, so a partial update never
+  // wipes untouched fields (attachments, checklist, …). `addAttachments` appends
+  // without re-sending the whole list.
+  'tasks.update': write(STAFF_WRITE, async function(u, a, c) {
+    var i = a.input || {};
+    var cur = await tasks.getTask(a.taskId);
+    var touchedAssignee = i.assignee != null || i.assigneeName != null || i.assigneeUserId != null;
+    var merged = {
+      projectId: i.projectId != null ? i.projectId : cur.projectId,
+      title: i.title != null ? i.title : cur.title,
+      description: i.description != null ? i.description : cur.description,
+      checklist: i.checklist != null ? i.checklist : cur.checklist,
+      attachments: i.attachments != null ? i.attachments : cur.attachments,
+      status: i.status != null ? i.status : cur.status,
+      priority: i.priority != null ? i.priority : cur.priority,
+      assigneeName: touchedAssignee ? (i.assigneeName || i.assignee) : cur.assignee,
+      assigneeUserId: touchedAssignee ? i.assigneeUserId : cur.assigneeUserId,
+      startDate: i.startDate != null ? agentDate(i.startDate) : cur.startDate,
+      dueDate: i.dueDate != null ? agentDate(i.dueDate) : cur.dueDate,
+      reviewerUserId: i.reviewerUserId != null ? i.reviewerUserId : cur.reviewerUserId,
+    };
+    if (Array.isArray(i.addAttachments) && i.addAttachments.length) {
+      merged.attachments = [].concat(merged.attachments || [], i.addAttachments);
+    }
+    return tasks.updateTask(a.taskId, merged, u, c);
+  }, function(a) { return 'Update task ' + a.taskId; }),
   'tasks.setStatus': write(STAFF_WRITE, function(u, a, c) { return tasks.updateStatus(a.taskId, a.status, u, c); },
     function(a) { return 'Set task ' + a.taskId + ' status to ' + a.status; }),
   'tasks.move': write(STAFF_WRITE, function(u, a, c) { return tasks.moveTasks(a.input || {}, u, c); },
     function() { return 'Move / reorder tasks'; }),
+
+  // ----- Task comments (threaded, @mentions; author = the acting agent user) -----
+  'tasks.comments': read(ALL, function(u, a) { return taskComments.listComments(a.taskId); }),
+  'tasks.comment': write(ALL, function(u, a, c) { return taskComments.createComment(a.taskId, a.input || {}, u, c); },
+    function(a) {
+      var body = (a.input && a.input.body) || '';
+      return 'Comment on task ' + a.taskId + (body ? ': "' + String(body).slice(0, 80) + '"' : '');
+    }),
+  'tasks.deleteComment': write(ALL, function(u, a) { return taskComments.deleteComment(a.taskId, a.commentId, u); },
+    function(a) { return 'Delete comment ' + a.commentId + ' on task ' + a.taskId; }),
 
   // ----- Notes (requester's own only, enforced by the notes service) -----
   'notes.list': read(ALL, function(u, a) { return notes.list(a || {}, u); }),
@@ -182,6 +218,14 @@ var ACTIONS = {
     function() { return 'Add a note'; }),
   'notes.update': write(ALL, function(u, a, c) { return notes.update(a.noteId, a.input || {}, u, c); },
     function(a) { return 'Update note ' + a.noteId; }),
+
+  // ----- Notifications (the agent's own inbox: mentions, status changes) -----
+  'notifications.list': read(ALL, function(u, a) { return notifications.listNotifications(u, a.filters || {}); }),
+  'notifications.unreadCount': read(ALL, function(u) { return notifications.unreadCount(u); }),
+  'notifications.markRead': write(ALL, function(u, a) { return notifications.markRead(a.notificationId, u); },
+    function(a) { return 'Mark notification ' + a.notificationId + ' read'; }),
+  'notifications.markAllRead': write(ALL, function(u) { return notifications.markAllRead(u); },
+    function() { return 'Mark all notifications read'; }),
 
   // ----- Issue Boards (create, apply to client, checklists; no delete) -----
   'issues.list': read(ALL, function(u, a) { return issues.listIssues(a.filters || {}); }),
@@ -256,13 +300,22 @@ var ARGS = {
   'tasks.assignees': {},
   'tasks.create': { input: { title: 'string, required', description: 'string', checklist: '[{ title, completed:boolean }]', attachments: '[{ name, url, type: "link" | "file" }] (links/files by URL)', projectId: 'string id', assigneeName: 'string (person name)', dueDate: 'YYYY-MM-DD', priority: PRIORITY, status: TASK_STATUS } },
   'tasks.createOrganized': { input: { requestor: 'string, optional (email or full name of who asked)', description: 'string, required (brief; AI builds title + checklist)', attachments: '[{ name, url, type: "link" | "file" }], optional (added alongside links the AI detects)', projectId: 'string id', assignee: 'string (person name; if set, task skips approval and goes to their board)', dueDate: 'YYYY-MM-DD', title: 'string, optional (overrides AI)', priority: PRIORITY + ', optional', status: TASK_STATUS + ', optional' } },
-  'tasks.update': { taskId: 'string id, required', input: 'object: same fields as tasks.create input' },
+  'tasks.update': { taskId: 'string id, required', input: 'object, partial: only the fields you send change (same fields as tasks.create input); addAttachments: "[{ name, url, type: \'link\'|\'file\' }] appends without resending the whole list"' },
   'tasks.setStatus': { taskId: 'string id, required', status: TASK_STATUS + ', required' },
   'tasks.move': { input: 'object: { items:[{ id, status, assignee, sortOrder }] }' },
+
+  'tasks.comments': { taskId: 'string id, required' },
+  'tasks.comment': { taskId: 'string id, required', input: 'object: { body: "string, required; mention a user with @[Name](userId)", parentId: "string id, optional (reply)" }' },
+  'tasks.deleteComment': { taskId: 'string id, required', commentId: 'string id, required (only your own, unless super admin)' },
 
   'notes.list': { projectId: 'string id, optional' },
   'notes.create': { input: 'object: { body, projectId, ... }' },
   'notes.update': { noteId: 'string id, required', input: 'object: { body, ... }' },
+
+  'notifications.list': { filters: 'object, optional' },
+  'notifications.unreadCount': {},
+  'notifications.markRead': { notificationId: 'string id, required' },
+  'notifications.markAllRead': {},
 
   'issues.list': { filters: 'object, optional: { status, projectId, q }' },
   'issues.get': { issueId: 'string id, required' },

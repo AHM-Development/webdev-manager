@@ -151,6 +151,7 @@ function rowToTask(row) {
     stageId: row.stage_id ? String(row.stage_id) : null,
     websiteId: row.website_id ? String(row.website_id) : null,
     reviewerUserId: row.reviewer_user_id ? String(row.reviewer_user_id) : null,
+    createdBy: row.created_by ? String(row.created_by) : null,
     isCritical: !!row.is_critical,
     acceptanceCriteria: parseJson(row.acceptance_criteria, []),
     affectedUrls: parseJson(row.affected_urls, []),
@@ -377,6 +378,22 @@ function notifyReviewer(task, actor, context, prevReviewerId) {
     }, actor, context).catch(function() {});
   }
 }
+// Ping the task's creator when its status moves — so whoever logged the task
+// (a teammate, or Viktor for the tasks he creates) hears when it progresses.
+// Skips the actor changing their own task and the reviewer already pinged.
+function notifyCreatorStatusChange(task, actor, context, fromStatus) {
+  var creator = task.createdBy ? String(task.createdBy) : null;
+  if (!creator) return;
+  if (creator === String(actor.id)) return;
+  if (task.reviewerUserId && creator === String(task.reviewerUserId) && task.status === 'Review') return;
+  notifications.dispatch(notifications.CATEGORY.TASK_ASSIGNMENT, {
+    userId: creator, audienceType: 'user', type: 'task_status_changed',
+    title: 'A task you created changed status',
+    message: actorName(actor) + ' moved ' + taskHeadline(task) + ' from ' +
+      (fromStatus || '—') + ' to ' + task.status + taskExtras(task),
+    actionUrl: taskActionUrl(task), metadata: taskMeta(task),
+  }, actor, context).catch(function() {});
+}
 
 // Resolve a "requestor" (an email or full name) to an active user id.
 async function resolveRequestor(value) {
@@ -489,12 +506,14 @@ async function updateTask(taskId, input, user, context) {
   await logTaskActivity(user, context, 'tasks.update', task);
   notifyAssignee(task, user, context, before.assigneeUserId, 'updated');
   notifyReviewer(task, user, context, before.reviewerUserId);
+  if (task.status !== before.status) notifyCreatorStatusChange(task, user, context, before.status);
   taskBus.emitTaskChange('updated', task);
   return task;
 }
 
 async function updateStatus(taskId, status, user, context) {
-  assertStaffCanModify(await getTask(taskId), user);
+  var before = await getTask(taskId);
+  assertStaffCanModify(before, user);
   var normalized = safeStatus(status, null);
   if (!normalized) fail(400, 'VALIDATION_ERROR', 'Status is invalid.');
   await db.query(
@@ -505,6 +524,7 @@ async function updateStatus(taskId, status, user, context) {
   );
   var task = await getTask(taskId);
   await logTaskActivity(user, context, 'tasks.status_update', task);
+  if (normalized !== before.status) notifyCreatorStatusChange(task, user, context, before.status);
   // Moving to Review pings the reviewer that it's ready for them.
   if (normalized === 'Review' && task.reviewerUserId && String(task.reviewerUserId) !== String(user.id)) {
     notifications.dispatch(notifications.CATEGORY.REVIEW, {

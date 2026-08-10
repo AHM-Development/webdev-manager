@@ -155,8 +155,14 @@ test('registry: no destructive actions and every entry is well-formed', () => {
   const real = require(path.resolve(__dirname, './agent.actions.js'));
   const keys = Object.keys(real.ACTIONS);
   assert.ok(keys.length > 20);
+  // The only sanctioned "delete" is removing the agent's OWN task comment: a
+  // reversible soft-delete, author-gated in the comments service. No other
+  // destructive verb may be exposed.
+  const DESTRUCTIVE_ALLOWED = new Set(['tasks.deleteComment']);
   for (const key of keys) {
-    assert.doesNotMatch(key, /delete|remove|clear|destroy/i, `destructive key leaked: ${key}`);
+    if (!DESTRUCTIVE_ALLOWED.has(key)) {
+      assert.doesNotMatch(key, /delete|remove|clear|destroy/i, `destructive key leaked: ${key}`);
+    }
     const entry = real.ACTIONS[key];
     assert.ok(['read', 'write'].includes(entry.access), `bad access on ${key}`);
     assert.ok(Array.isArray(entry.roles) && entry.roles.length, `missing roles on ${key}`);

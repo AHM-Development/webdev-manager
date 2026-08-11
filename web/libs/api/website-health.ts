@@ -131,6 +131,28 @@ export async function getWebsiteQaResults(websiteId: string) {
   return data;
 }
 
+export type WebsiteQaResultInput = {
+  criterionId: string | number;
+  status: WebsiteQaStatus;
+  note?: string;
+  detail?: string;
+  checks?: string;
+  fix?: string;
+};
+
+/** Import findings as the logged-in user (no push token / outbound connectivity
+ *  needed) — same endpoint the external runner posts to. */
+export async function importWebsiteQaResults(
+  websiteId: string,
+  results: WebsiteQaResultInput[]
+) {
+  const { data } = await apiClient.post<WebsiteQaResults>(
+    endpoints.websiteHealth.qaResults(websiteId),
+    { results }
+  );
+  return data;
+}
+
 // ---- QA Runner: per-website push token + copyable prompt ----
 export type QaRunner = {
   hasToken: boolean;

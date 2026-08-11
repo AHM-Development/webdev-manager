@@ -1,13 +1,14 @@
 "use client";
 
-import { Button, Chip } from "@heroui/react";
-import { Copy, KeyRound, RefreshCw, Trash2 } from "lucide-react";
+import { Button, Chip, TextArea } from "@heroui/react";
+import { Copy, Download, KeyRound, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
   generateQaToken,
   getQaRunner,
   getWebsiteQaResults,
+  importWebsiteQaResults,
   revokeQaToken,
   type QaRunner,
   type WebsiteQaItem,
@@ -67,7 +68,13 @@ function QaItemRow({ item }: { item: WebsiteQaItem }) {
   );
 }
 
-function QaResults({ websiteId }: { websiteId?: string | null }) {
+function QaResults({
+  websiteId,
+  reloadToken,
+}: {
+  websiteId?: string | null;
+  reloadToken?: number;
+}) {
   const [data, setData] = useState<WebsiteQaResults | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -88,7 +95,7 @@ function QaResults({ websiteId }: { websiteId?: string | null }) {
     return () => {
       active = false;
     };
-  }, [websiteId]);
+  }, [websiteId, reloadToken]);
 
   if (loading) return <p className="text-sm text-slate-400">Loading QA findings…</p>;
   if (!data || data.groups.length === 0) {
@@ -149,10 +156,19 @@ function formatDate(value: string | null) {
 
 // Super-Admin / Developer panel: a per-website push token and the ready-to-paste
 // prompt an external Claude uses to run QA and push findings back to this site.
-function QaRunnerPanel({ websiteId }: { websiteId?: string | null }) {
+function QaRunnerPanel({
+  websiteId,
+  onImported,
+}: {
+  websiteId?: string | null;
+  onImported?: () => void;
+}) {
   const [runner, setRunner] = useState<QaRunner | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     if (!websiteId) return;
@@ -207,6 +223,37 @@ function QaRunnerPanel({ websiteId }: { websiteId?: string | null }) {
     }
   };
 
+  const applyImport = async () => {
+    if (!websiteId) return;
+    // Accept either the full push body {"results":[...]} or a bare [...] array.
+    let results: unknown;
+    try {
+      const parsed = JSON.parse(importText);
+      results = Array.isArray(parsed) ? parsed : (parsed as { results?: unknown }).results;
+    } catch {
+      notify.error("That isn't valid JSON", { description: "Paste the results payload the QA run produced." });
+      return;
+    }
+    if (!Array.isArray(results) || results.length === 0) {
+      notify.error("No results found", { description: 'Expected {"results":[…]} or a [ … ] array.' });
+      return;
+    }
+    setImporting(true);
+    try {
+      await importWebsiteQaResults(websiteId, results as never);
+      notify.success("Results imported", { description: `${results.length} finding${results.length === 1 ? "" : "s"} applied.` });
+      setImportText("");
+      setShowImport(false);
+      onImported?.();
+    } catch (err) {
+      notify.error("Couldn't import results", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -216,7 +263,7 @@ function QaRunnerPanel({ websiteId }: { websiteId?: string | null }) {
             <p className="text-sm font-semibold text-slate-800">QA Runner</p>
             <p className="mt-0.5 text-xs text-slate-500">
               {runner?.hasToken
-                ? "Copy the prompt and paste it into Claude — it reviews the site and pushes findings back here."
+                ? "Copy the prompt into Claude. It can push results back with the token — or if it can't reach the server, paste its results payload with Import."
                 : "Generate a token to get a ready-to-paste prompt for the external Claude QA run."}
             </p>
           </div>
@@ -233,6 +280,15 @@ function QaRunnerPanel({ websiteId }: { websiteId?: string | null }) {
               Copy prompt
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="secondary"
+            isDisabled={busy}
+            onPress={() => setShowImport((v) => !v)}
+          >
+            <Download className="h-4 w-4" />
+            Import results
+          </Button>
           <Button size="sm" variant="tertiary" isDisabled={busy} onPress={generate}>
             <RefreshCw className="h-4 w-4" />
             {runner?.hasToken ? "Regenerate" : "Generate token"}
@@ -274,6 +330,45 @@ function QaRunnerPanel({ websiteId }: { websiteId?: string | null }) {
           </p>
         </div>
       )}
+
+      {showImport && (
+        <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
+          <p className="text-xs text-slate-500">
+            Paste the results payload the QA run produced — the whole{" "}
+            <code className="rounded bg-white px-1 ring-1 ring-slate-200">{`{"results":[…]}`}</code>{" "}
+            object or just the array. Imported as you, so no token or server access is needed.
+          </p>
+          <TextArea
+            aria-label="QA results payload"
+            value={importText}
+            onChange={(event) => setImportText(event.target.value)}
+            rows={7}
+            className="w-full resize-y font-mono text-xs"
+            placeholder={'{"results":[\n  {"criterionId":"12","status":"fail","detail":"…","fix":"…"}\n]}'}
+          />
+          <div className="flex justify-end gap-2">
+            <Button
+              size="sm"
+              variant="tertiary"
+              isDisabled={importing}
+              onPress={() => {
+                setShowImport(false);
+                setImportText("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              isDisabled={importing || !importText.trim()}
+              onPress={applyImport}
+            >
+              {importing ? "Importing…" : "Apply results"}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -281,11 +376,17 @@ function QaRunnerPanel({ websiteId }: { websiteId?: string | null }) {
 export function WebsiteQaTab({ websiteId }: { websiteId?: string | null }) {
   const { user } = useAuth();
   const canManage = user?.role === "superadmin" || user?.role === "developer";
+  const [reloadToken, setReloadToken] = useState(0);
 
   return (
     <div className="space-y-6">
-      {canManage && <QaRunnerPanel websiteId={websiteId} />}
-      <QaResults websiteId={websiteId} />
+      {canManage && (
+        <QaRunnerPanel
+          websiteId={websiteId}
+          onImported={() => setReloadToken((t) => t + 1)}
+        />
+      )}
+      <QaResults websiteId={websiteId} reloadToken={reloadToken} />
     </div>
   );
 }

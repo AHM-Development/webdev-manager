@@ -421,8 +421,6 @@ export function WebsiteHealthTable() {
                 <TableColumn id="overall">Overall</TableColumn>
                 <TableColumn id="pages">Pages</TableColumn>
                 <TableColumn id="lighthouse">Lighthouse</TableColumn>
-                <TableColumn id="seo">Technical SEO</TableColumn>
-                <TableColumn id="design">Design QA</TableColumn>
                 <TableColumn id="checklists">Website checklists</TableColumn>
                 <TableColumn id="last">Last Scan</TableColumn>
                 <TableColumn id="action">Action</TableColumn>
@@ -444,8 +442,6 @@ export function WebsiteHealthTable() {
                       <TableCell><Metric value={summary?.overall} className={scoreTone(summary?.overall)} /></TableCell>
                       <TableCell><Metric value={summary?.pages} className="text-slate-700" /></TableCell>
                       <TableCell><Metric value={summary?.performance} className={scoreTone(summary?.performance)} /></TableCell>
-                      <TableCell><Metric value={summary?.technicalSeoIssues} className={issueTone(summary?.technicalSeoIssues)} /></TableCell>
-                      <TableCell><Metric value={summary?.designIssues} className={issueTone(summary?.designIssues)} /></TableCell>
                       <TableCell><Metric value={summary?.checklistIssues} className={issueTone(summary?.checklistIssues)} /></TableCell>
                       <TableCell><span className="whitespace-nowrap text-sm text-slate-600">{formatDateTime(scan?.completedAt || scan?.createdAt)}</span></TableCell>
                       <TableCell>

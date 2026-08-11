@@ -180,10 +180,6 @@ function ScoreText({ score }: { score: number }) {
 function OverviewTab({ audit }: { audit: SiteAudit }) {
   const summary = summarize(audit);
   const allForms = audit.pages.flatMap((page) => page.forms);
-  const designIssues = audit.pages.flatMap((page) => page.designQa.issues);
-  const seoStatuses = audit.pages.flatMap((page) => Object.values(page.seoChecks));
-  const seoIssues = seoStatuses.filter((status) => status !== "pass").length;
-  const seoCritical = seoStatuses.filter((status) => status === "fail").length;
   const formIssues = allForms.filter(
     (form) => form.submitStatus === "failed" || form.recaptcha === "missing"
   ).length;
@@ -222,11 +218,6 @@ function OverviewTab({ audit }: { audit: SiteAudit }) {
         detail: `${form.pageName} ${form.resultMessage}`,
         status: form.submitStatus === "failed" ? ("fail" as CheckStatus) : ("warn" as CheckStatus),
       })),
-    ...designIssues.slice(0, 4).map((issue) => ({
-      title: issue.title,
-      detail: `${issue.viewport}: ${issue.detail}`,
-      status: issue.severity,
-    })),
   ].slice(0, 8);
 
   return (
@@ -243,24 +234,6 @@ function OverviewTab({ audit }: { audit: SiteAudit }) {
               : summary.performance >= 70
                 ? "warning"
                 : "danger"
-          }
-        />
-        <SummaryCard
-          label="Technical SEO"
-          value={seoIssues}
-          detail={`${seoCritical} failed checks`}
-          tone={seoCritical > 0 ? "danger" : seoIssues > 0 ? "warning" : "success"}
-        />
-        <SummaryCard
-          label="Design QA"
-          value={designIssues.length}
-          detail={`${designIssues.filter((issue) => issue.severity === "fail").length} critical layout issues`}
-          tone={
-            designIssues.some((issue) => issue.severity === "fail")
-              ? "danger"
-              : designIssues.length > 0
-                ? "warning"
-                : "success"
           }
         />
         <SummaryCard
